@@ -1,0 +1,134 @@
+from datetime import datetime, timezone
+import time
+import logging
+from typing import Sequence, Tuple, Optional
+
+from aegis_trade.domain.core import Symbol, TimeFrame, MarketBar
+from aegis_trade.domain.data_context import DataContext
+from aegis_trade.domain.exceptions.data import PipelineError, DataProviderError, ValidationError, NormalizationError, ConfigurationError
+from aegis_trade.infrastructure.data.registry import ProviderRegistry
+from aegis_trade.infrastructure.data.validator import DataValidator
+from aegis_trade.infrastructure.data.normalizer import DataNormalizer
+from aegis_trade.infrastructure.data.cache import CacheBackend
+
+logger = logging.getLogger(__name__)
+
+class MarketDataPipeline:
+    """
+    The orchestrator for market data ingestion.
+    Flow: Ingestion -> Validation -> Normalization -> Cache -> Publication
+    """
+
+    def __init__(
+        self,
+        cache_backend: CacheBackend,
+        validator: DataValidator,
+        normalizer: DataNormalizer
+    ):
+        self.cache = cache_backend
+        self.validator = validator
+        self.normalizer = normalizer
+
+    def fetch_ohlcv(
+        self, 
+        provider_name: str, 
+        symbol: Symbol, 
+        timeframe: TimeFrame, 
+        start: datetime, 
+        end: datetime,
+        use_cache: bool = True
+    ) -> Tuple[Sequence[MarketBar], DataContext]:
+        """
+        Orchestrates the fetching, validation, and normalization of OHLCV data.
+        Returns the data and its context metadata.
+        """
+        start_time = time.perf_counter()
+        retrieved_at = datetime.now(timezone.utc)
+        
+        # Check cache
+        cache_key = self.cache.generate_key(
+            "ohlcv", 
+            provider=provider_name, 
+            symbol=symbol.name, 
+            timeframe=timeframe.value, 
+            start=start.isoformat(), 
+            end=end.isoformat()
+        )
+        
+        cache_hit = False
+        if use_cache:
+            try:
+                cached_data = self.cache.get(cache_key)
+                if cached_data is not None:
+                    cache_hit = True
+                    latency = time.perf_counter() - start_time
+                    context = DataContext(
+                        provider=provider_name,
+                        symbol=symbol,
+                        timeframe=timeframe,
+                        timezone="UTC",
+                        source="cache",
+                        retrieved_at=retrieved_at,
+                        latency=latency,
+                        cache_hit=cache_hit
+                    )
+                    logger.info(f"Cache hit for OHLCV {symbol.name} ({timeframe.value}) via {provider_name}")
+                    return cached_data, context
+            except Exception as e:
+                logger.warning(f"Cache get failed: {e}. Falling back to API.")
+
+        # 1. Ingestion
+        provider = ProviderRegistry.get(provider_name)
+        try:
+            raw_bars = provider.fetch_ohlcv(symbol, timeframe, start, end)
+        except DataProviderError:
+            raise
+        except Exception as e:
+            raise PipelineError(f"Unexpected ingestion failure: {e}") from e
+            
+        if not raw_bars:
+            logger.info(f"Pipeline: Provider returned empty data for {symbol.name}")
+            return [], DataContext(
+                provider=provider_name, symbol=symbol, timeframe=timeframe,
+                timezone="UTC", source="api", retrieved_at=retrieved_at,
+                latency=time.perf_counter() - start_time, cache_hit=False
+            )
+
+        # 2. Validation
+        try:
+            validated_bars = self.validator.validate_ohlcv(raw_bars)
+        except ValidationError:
+            raise
+        except Exception as e:
+            raise PipelineError(f"Unexpected validation failure: {e}") from e
+
+        # 3. Normalization
+        try:
+            normalized_bars = self.normalizer.normalize_ohlcv(validated_bars)
+        except NormalizationError:
+            raise
+        except Exception as e:
+            raise PipelineError(f"Unexpected normalization failure: {e}") from e
+
+        # 4. Cache
+        if use_cache:
+            try:
+                self.cache.set(cache_key, normalized_bars)
+            except Exception as e:
+                logger.warning(f"Failed to cache data: {e}")
+
+        # 5. Context preparation
+        latency = time.perf_counter() - start_time
+        context = DataContext(
+            provider=provider_name,
+            symbol=symbol,
+            timeframe=timeframe,
+            timezone="UTC",
+            source="api",
+            retrieved_at=retrieved_at,
+            latency=latency,
+            cache_hit=cache_hit
+        )
+        
+        logger.info(f"Pipeline fetched {len(normalized_bars)} bars for {symbol.name} in {latency:.3f}s")
+        return normalized_bars, context

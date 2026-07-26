@@ -11,7 +11,7 @@ from aegis_trade.infrastructure.data.providers.openbb_provider import OpenBBData
 def test_openbb_empty_dataframe(mock_obb):
     mock_res = MagicMock()
     mock_res.to_df.return_value = pd.DataFrame()
-    mock_obb.equity.price.historical.return_value = mock_res
+    mock_obb.index.price.historical.return_value = mock_res
     
     provider = OpenBBDataProvider()
     sym = Symbol("DXY", AssetClass.INDICES)
@@ -22,7 +22,7 @@ def test_openbb_empty_dataframe(mock_obb):
 @patch("aegis_trade.infrastructure.data.providers.openbb_provider.obb")
 def test_openbb_network_error_raises_data_provider_error(mock_obb):
     # Simulate a network error (e.g. timeout)
-    mock_obb.equity.price.historical.side_effect = Exception("Connection Timeout")
+    mock_obb.index.price.historical.side_effect = Exception("Connection Timeout")
     
     provider = OpenBBDataProvider()
     # reduce retries for fast testing, we can mock tenacity's wait logic if needed, 

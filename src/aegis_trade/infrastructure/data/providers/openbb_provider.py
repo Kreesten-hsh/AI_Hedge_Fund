@@ -39,6 +39,9 @@ class OpenBBDataProvider(IDataProvider):
         self, symbol: Symbol, timeframe: TimeFrame, start: datetime, end: datetime
     ) -> Sequence[MarketBar]:
         
+        if symbol.name not in ["DXY", "US10Y"]:
+            raise DataProviderError(f"Mission C restricts OpenBBDataProvider to DXY and US10Y exclusively. Requested: {symbol.name}")
+            
         # Mapping timeframe to OpenBB interval
         interval_map = {
             TimeFrame.M1: "1m",
@@ -51,17 +54,17 @@ class OpenBBDataProvider(IDataProvider):
         }
         interval = interval_map.get(timeframe, "1d")
         
-        # Hardcode ticker map for known macro indices (since DXY/US10Y was supported earlier)
+        # Hardcode ticker map for known macro indices
         ticker_map = {
             "DXY": "DX-Y.NYB",
             "US10Y": "^TNX"
         }
-        target_ticker = ticker_map.get(symbol.name, symbol.name)
+        target_ticker = ticker_map[symbol.name]
         
         try:
             # We enforce a timeout if the openbb client allows it. 
-            # With openbb v4, kwargs pass down to provider. 
-            res = obb.equity.price.historical(
+            # Using obb.index.price.historical as discovered via SDK inspection.
+            res = obb.index.price.historical(
                 symbol=target_ticker,
                 provider=self.default_provider,
                 interval=interval,
@@ -94,10 +97,10 @@ class OpenBBDataProvider(IDataProvider):
     def fetch_macro(
         self, symbol: Symbol, start: datetime, end: datetime
     ) -> Sequence[EconomicIndicator]:
-        return []
+        raise NotImplementedError("fetch_macro is not implemented in Mission C.")
 
     def fetch_snapshot(self, symbol: Symbol) -> MarketSnapshot:
-        raise DataProviderError("Snapshot fetch not implemented for OpenBB provider yet.")
+        raise NotImplementedError("fetch_snapshot is not implemented in Mission C.")
 
     def fetch_news(self, symbol: Symbol, start: datetime, end: datetime) -> Sequence[NewsItem]:
-        return []
+        raise NotImplementedError("fetch_news is not implemented in Mission C.")

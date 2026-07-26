@@ -56,3 +56,16 @@ def test_normalizer_rounding():
     
     normalized = normalizer.normalize_ohlcv(bars)
     assert normalized[0].open == Decimal("1.12345679") # Rounded to 8 decimals
+
+from unittest.mock import MagicMock
+from aegis_trade.domain.exceptions.data import NormalizationError
+
+def test_normalizer_raises_normalization_error():
+    normalizer = DataNormalizer()
+    
+    # Create a mock bar where accessing 'open' raises an exception
+    mock_bar = MagicMock(spec=MarketBar)
+    type(mock_bar).open = property(lambda self: (_ for _ in ()).throw(Exception("Invalid type for open")))
+    
+    with pytest.raises(NormalizationError, match="Failed to normalize MarketBars"):
+        normalizer.normalize_ohlcv([mock_bar])

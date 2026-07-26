@@ -118,3 +118,105 @@ def test_pipeline_provider_error_propagates(pipeline):
     
     with pytest.raises(DataProviderError, match="API Rate Limit"):
         pipeline.fetch_ohlcv("mock_provider", sym, TimeFrame.D1, start, end, use_cache=False)
+
+def test_pipeline_cache_get_error(pipeline, dummy_bars):
+    mock_provider = MagicMock()
+    mock_provider.fetch_ohlcv.return_value = dummy_bars
+    ProviderRegistry.register("mock_provider", lambda **kwargs: mock_provider)
+    
+    pipeline.cache.get = MagicMock(side_effect=Exception("Redis connection lost"))
+    
+    sym = Symbol(name="DXY", asset_class=AssetClass.INDICES)
+    start = datetime(2023, 1, 1, tzinfo=timezone.utc)
+    end = datetime(2023, 1, 2, tzinfo=timezone.utc)
+    
+    bars, context = pipeline.fetch_ohlcv("mock_provider", sym, TimeFrame.D1, start, end)
+    
+    assert len(bars) == 2
+    assert context.source == "api"
+
+def test_pipeline_provider_unexpected_error(pipeline):
+    mock_provider = MagicMock()
+    mock_provider.fetch_ohlcv.side_effect = Exception("Unknown provider crash")
+    ProviderRegistry.register("mock_provider", lambda **kwargs: mock_provider)
+    
+    sym = Symbol(name="DXY", asset_class=AssetClass.INDICES)
+    start = datetime(2023, 1, 1, tzinfo=timezone.utc)
+    end = datetime(2023, 1, 2, tzinfo=timezone.utc)
+    
+    with pytest.raises(PipelineError, match="Unexpected ingestion failure: Unknown provider crash"):
+        pipeline.fetch_ohlcv("mock_provider", sym, TimeFrame.D1, start, end, use_cache=False)
+
+def test_pipeline_provider_empty_data(pipeline):
+    mock_provider = MagicMock()
+    mock_provider.fetch_ohlcv.return_value = []
+    ProviderRegistry.register("mock_provider", lambda **kwargs: mock_provider)
+    
+    sym = Symbol(name="DXY", asset_class=AssetClass.INDICES)
+    start = datetime(2023, 1, 1, tzinfo=timezone.utc)
+    end = datetime(2023, 1, 2, tzinfo=timezone.utc)
+    
+    bars, context = pipeline.fetch_ohlcv("mock_provider", sym, TimeFrame.D1, start, end, use_cache=False)
+    assert bars == []
+    assert not context.cache_hit
+    assert context.source == "api"
+
+def test_pipeline_validator_unexpected_error(pipeline, dummy_bars):
+    mock_provider = MagicMock()
+    mock_provider.fetch_ohlcv.return_value = dummy_bars
+    ProviderRegistry.register("mock_provider", lambda **kwargs: mock_provider)
+    
+    pipeline.validator.validate_ohlcv = MagicMock(side_effect=Exception("Validator crash"))
+    
+    sym = Symbol(name="DXY", asset_class=AssetClass.INDICES)
+    start = datetime(2023, 1, 1, tzinfo=timezone.utc)
+    end = datetime(2023, 1, 2, tzinfo=timezone.utc)
+    
+    with pytest.raises(PipelineError, match="Unexpected validation failure: Validator crash"):
+        pipeline.fetch_ohlcv("mock_provider", sym, TimeFrame.D1, start, end, use_cache=False)
+
+from aegis_trade.domain.exceptions.data import NormalizationError
+
+def test_pipeline_normalizer_normalization_error(pipeline, dummy_bars):
+    mock_provider = MagicMock()
+    mock_provider.fetch_ohlcv.return_value = dummy_bars
+    ProviderRegistry.register("mock_provider", lambda **kwargs: mock_provider)
+    
+    pipeline.normalizer.normalize_ohlcv = MagicMock(side_effect=NormalizationError("Missing volume column"))
+    
+    sym = Symbol(name="DXY", asset_class=AssetClass.INDICES)
+    start = datetime(2023, 1, 1, tzinfo=timezone.utc)
+    end = datetime(2023, 1, 2, tzinfo=timezone.utc)
+    
+    with pytest.raises(NormalizationError, match="Missing volume column"):
+        pipeline.fetch_ohlcv("mock_provider", sym, TimeFrame.D1, start, end, use_cache=False)
+
+def test_pipeline_normalizer_unexpected_error(pipeline, dummy_bars):
+    mock_provider = MagicMock()
+    mock_provider.fetch_ohlcv.return_value = dummy_bars
+    ProviderRegistry.register("mock_provider", lambda **kwargs: mock_provider)
+    
+    pipeline.normalizer.normalize_ohlcv = MagicMock(side_effect=Exception("Normalizer crash"))
+    
+    sym = Symbol(name="DXY", asset_class=AssetClass.INDICES)
+    start = datetime(2023, 1, 1, tzinfo=timezone.utc)
+    end = datetime(2023, 1, 2, tzinfo=timezone.utc)
+    
+    with pytest.raises(PipelineError, match="Unexpected normalization failure: Normalizer crash"):
+        pipeline.fetch_ohlcv("mock_provider", sym, TimeFrame.D1, start, end, use_cache=False)
+
+def test_pipeline_cache_set_error(pipeline, dummy_bars):
+    mock_provider = MagicMock()
+    mock_provider.fetch_ohlcv.return_value = dummy_bars
+    ProviderRegistry.register("mock_provider", lambda **kwargs: mock_provider)
+    
+    pipeline.cache.set = MagicMock(side_effect=Exception("Disk full"))
+    
+    sym = Symbol(name="DXY", asset_class=AssetClass.INDICES)
+    start = datetime(2023, 1, 1, tzinfo=timezone.utc)
+    end = datetime(2023, 1, 2, tzinfo=timezone.utc)
+    
+    bars, context = pipeline.fetch_ohlcv("mock_provider", sym, TimeFrame.D1, start, end, use_cache=True)
+    
+    assert len(bars) == 2
+    assert context.source == "api"

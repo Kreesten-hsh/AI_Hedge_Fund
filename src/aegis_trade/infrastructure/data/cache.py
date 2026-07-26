@@ -16,21 +16,21 @@ class CacheBackend(ABC):
 
     @abstractmethod
     def get(self, key: str) -> Optional[Any]:
-        pass
+        pass  # pragma: no cover
 
     @abstractmethod
     def set(self, key: str, value: Any, ttl: Optional[int] = None) -> None:
-        pass
+        pass  # pragma: no cover
         
     @abstractmethod
     def invalidate(self, key: str) -> None:
         """Removes a specific key from the cache."""
-        pass
+        pass  # pragma: no cover
 
     @abstractmethod
     def clear(self) -> None:
         """Clears the entire cache."""
-        pass
+        pass  # pragma: no cover
         
     @staticmethod
     def generate_key(prefix: str, **kwargs) -> str:

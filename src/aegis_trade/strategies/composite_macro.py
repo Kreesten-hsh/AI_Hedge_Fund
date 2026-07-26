@@ -5,6 +5,12 @@ from typing import Dict
 from aegis_trade.engine.strategy import Strategy
 from aegis_trade.engine.events import MarketEvent, SignalEvent, SignalIntent
 
+# ============================================================================
+# AVERTISSEMENT DE DISCIPLINE SCIENTIFIQUE
+# Hypothèse en phase Implémentation — non validée statistiquement.
+# Ne pas utiliser en Council/Portfolio tant que la Mission C n'a pas produit un verdict IC.
+# ============================================================================
+
 class CompositeMacroStrategy(Strategy):
     """
     Composite Macro Strategy.

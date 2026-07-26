@@ -23,6 +23,7 @@ Mettre en place une source de vérité unique pour les données de marché et st
 ### Critères d'acceptation
 - Le `DatasetEngine` est remplacé ou complété par un Data Pipeline capable de télécharger, nettoyer et stocker des milliers de bougies (Marketbars) automatiquement.
 - Les Stratégies ne calculent plus manuellement l'ATR ou le RSI, elles le lisent via le Feature Engine.
+- **DISCIPLINE SCIENTIFIQUE** : Aucune feature ou signal ne peut être consommé par un Agent (Phase 7) ou une Stratégie tant qu'il n'a pas passé les critères IC et une validation Holdout dédiée, documentés dans un rapport reproductible.
 
 ---
 
@@ -81,6 +82,7 @@ Démultiplier la puissance de décision en intégrant de vrais LLMs asynchrones 
 
 ### Dépendances
 - Phase 6.
+- Toute feature/agent utilisant un signal macro doit référencer le rapport de validation IC correspondant.
 
 ### Risques
 - Dérive des coûts liés aux appels d'API LLM Cloud.

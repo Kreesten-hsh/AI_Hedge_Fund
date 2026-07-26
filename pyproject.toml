@@ -7,7 +7,7 @@ name = "aegis-trade"
 version = "0.1.0"
 description = "Local-first financial research and MT5 demo-trading foundation."
 requires-python = ">=3.11"
-dependencies = ["MetaTrader5>=5.0.45", "python-dotenv>=1.0", "pyarrow>=15.0.0", "numpy>=1.26.0", "pandas>=2.0.0", "openbb>=4.0.0", "vnpy", "pyqlib", "PyYAML>=6.0"]
+dependencies = ["MetaTrader5>=5.0.45", "python-dotenv>=1.0", "pyarrow>=15.0.0", "numpy>=1.26.0", "pandas>=2.0.0", "openbb>=4.0.0", "vnpy", "pyqlib", "PyYAML>=6.0", "tenacity>=8.2"]
 
 [project.optional-dependencies]
 dev = [
@@ -28,3 +28,6 @@ python_version = "3.11"
 strict = true
 warn_unreachable = true
 show_error_codes = true
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]

@@ -62,6 +62,49 @@ class MarketBar:
             raise ValueError("MarketBar volume cannot be negative.")
 
 @dataclass(frozen=True, slots=True)
+class EconomicIndicator:
+    symbol: Symbol
+    timestamp: datetime
+    value: Decimal
+    forecast: Decimal | None = None
+    previous: Decimal | None = None
+
+    def __post_init__(self) -> None:
+        if self.timestamp.tzinfo != timezone.utc:
+            raise ValueError("EconomicIndicator timestamp must be UTC.")
+
+
+@dataclass(frozen=True, slots=True)
+class NewsItem:
+    symbol: Symbol
+    timestamp: datetime
+    title: str
+    source: str
+    sentiment_score: float | None = None
+    url: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.timestamp.tzinfo != timezone.utc:
+            raise ValueError("NewsItem timestamp must be UTC.")
+        if not self.title:
+            raise ValueError("NewsItem must have a title.")
+
+
+@dataclass(frozen=True, slots=True)
+class MarketSnapshot:
+    symbol: Symbol
+    timestamp: datetime
+    price: Decimal
+    volume: Decimal | None = None
+
+    def __post_init__(self) -> None:
+        if self.timestamp.tzinfo != timezone.utc:
+            raise ValueError("MarketSnapshot timestamp must be UTC.")
+        if self.price <= 0:
+            raise ValueError("MarketSnapshot price must be positive.")
+
+
+@dataclass(frozen=True, slots=True)
 class Tick:
     symbol: Symbol
     timestamp: datetime

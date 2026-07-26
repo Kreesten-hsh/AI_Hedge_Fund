@@ -12,6 +12,7 @@ Requires-Dist: openbb>=4.0.0
 Requires-Dist: vnpy
 Requires-Dist: pyqlib
 Requires-Dist: PyYAML>=6.0
+Requires-Dist: tenacity>=8.2
 Provides-Extra: dev
 Requires-Dist: pytest; extra == "dev"
 Requires-Dist: pytest-cov; extra == "dev"

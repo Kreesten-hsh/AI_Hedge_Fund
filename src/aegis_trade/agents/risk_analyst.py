@@ -1,6 +1,12 @@
 import os
 from aegis_trade.agents.base import ResearchAgent
 
+# ============================================================================
+# AVERTISSEMENT DE DISCIPLINE SCIENTIFIQUE
+# Hypothèse en phase Implémentation — non validée statistiquement.
+# Ne pas utiliser en Council/Portfolio tant que la Mission C n'a pas produit un verdict IC.
+# ============================================================================
+
 class RiskAnalyst:
     """
     Risk Analyst Agent.

@@ -1,0 +1,14 @@
+MetaTrader5>=5.0.45
+python-dotenv>=1.0
+pyarrow>=15.0.0
+numpy>=1.26.0
+pandas>=2.0.0
+openbb>=4.0.0
+vnpy
+pyqlib
+PyYAML>=6.0
+
+[dev]
+pytest
+pytest-cov
+pytest-mock

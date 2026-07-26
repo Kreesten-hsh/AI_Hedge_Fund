@@ -1,0 +1,27 @@
+llm:
+  active_profile: low_resource
+  
+  profiles:
+    low_resource:
+      provider: ollama
+      model: llama3.2:1b
+      temperature: 0.0
+      format: json
+      timeout: 120
+      keep_alive: 0
+      
+    standard:
+      provider: ollama
+      model: qwen2.5:3b
+      temperature: 0.0
+      format: json
+      timeout: 120
+      keep_alive: 5
+      
+    high_performance:
+      provider: ollama
+      model: llama3.1:8b
+      temperature: 0.1
+      format: json
+      timeout: 180
+      keep_alive: 10

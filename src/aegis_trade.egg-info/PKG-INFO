@@ -1,0 +1,18 @@
+Metadata-Version: 2.4
+Name: aegis-trade
+Version: 0.1.0
+Summary: Local-first financial research and MT5 demo-trading foundation.
+Requires-Python: >=3.11
+Requires-Dist: MetaTrader5>=5.0.45
+Requires-Dist: python-dotenv>=1.0
+Requires-Dist: pyarrow>=15.0.0
+Requires-Dist: numpy>=1.26.0
+Requires-Dist: pandas>=2.0.0
+Requires-Dist: openbb>=4.0.0
+Requires-Dist: vnpy
+Requires-Dist: pyqlib
+Requires-Dist: PyYAML>=6.0
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: pytest-cov; extra == "dev"
+Requires-Dist: pytest-mock; extra == "dev"

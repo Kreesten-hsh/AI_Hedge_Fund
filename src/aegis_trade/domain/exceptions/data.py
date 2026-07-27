@@ -25,3 +25,7 @@ class PipelineError(Exception):
 class ConfigurationError(Exception):
     """Raised when there is a configuration issue, such as a missing provider."""
     pass
+
+class FeatureValidationError(ValidationError):
+    """Raised when quantitative features fail integrity checks."""
+    pass

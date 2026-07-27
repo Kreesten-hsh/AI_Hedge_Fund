@@ -70,3 +70,88 @@ def test_backtester_run():
     assert report is not None
     assert "total_return" in report.to_dict()
     assert report.total_return > 0.0 # Started at 100k, ended at ~100011.5
+
+from aegis_trade.engine.global_risk import GlobalRiskManager
+from decimal import Decimal
+from aegis_trade.domain.ports.position_sizer import IPositionSizer
+
+def test_backtester_with_kill_switch():
+    symbol = Symbol("AAPL", AssetClass.EQUITIES)
+    
+    class DrawdownDataFeed(IDataFeed):
+        def get_feature_stream(self, symbol, timeframe):
+            base_time = datetime(2023, 1, 1, tzinfo=timezone.utc)
+            prices = [100.0, 94.0, 94.0]
+            for i, p in enumerate(prices):
+                yield FeatureSet(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    timestamp=base_time + timedelta(days=i),
+                    features={'close_price': p, 'step': i}
+                )
+                
+    class DrawdownStrategy(IStrategy):
+        def generate_signals(self, features):
+            step = features.features['step']
+            if step == 0:
+                return [Signal(features.symbol, direction=1, strength=1.0, timestamp=features.timestamp)]
+            elif step == 1:
+                return [Signal(features.symbol, direction=0, strength=1.0, timestamp=features.timestamp)]
+            elif step == 2:
+                return [Signal(features.symbol, direction=1, strength=1.0, timestamp=features.timestamp)]
+            return []
+            
+    feed = DrawdownDataFeed()
+    strategy = DrawdownStrategy()
+    broker = SimulatedBroker(commission_rate=0.0, slippage_bps=0.0)
+    rm = GlobalRiskManager(max_drawdown=Decimal("0.05"), max_concentration=Decimal("5.0"), max_gross_exposure=Decimal("10.0"))
+    
+    backtester = Backtester(data_feed=feed, strategy=strategy, broker=broker, starting_capital=10000.0, risk_manager=rm)
+    backtester.run(symbol, TimeFrame.D1)
+    
+    rejections = [t for t in backtester.trades_history if t.get('rejected', False)]
+    assert len(rejections) > 0
+    assert "Kill Switch activated" in rejections[0]['reason']
+
+def test_backtester_ruin_protection_realized():
+    symbol = Symbol("AAPL", AssetClass.EQUITIES)
+    class RuinDataFeed(IDataFeed):
+        def get_feature_stream(self, symbol, timeframe):
+            base_time = datetime(2023, 1, 1, tzinfo=timezone.utc)
+            prices = [100.0, 10.0, 1.0]
+            for i, p in enumerate(prices):
+                yield FeatureSet(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    timestamp=base_time + timedelta(days=i),
+                    features={'close_price': p}
+                )
+                
+    class LeverageSizer(IPositionSizer):
+        def size(self, signal, capital, current_price):
+            return 200.0
+            
+    class BuyThenSellStrategy(IStrategy):
+        def generate_signals(self, features):
+            price = features.features['close_price']
+            if price == 100.0:
+                return [Signal(features.symbol, direction=1, strength=1.0, timestamp=features.timestamp)]
+            elif price == 10.0:
+                return [Signal(features.symbol, direction=-1, strength=1.0, timestamp=features.timestamp)]
+            return []
+
+    feed = RuinDataFeed()
+    strategy = BuyThenSellStrategy()
+    broker = SimulatedBroker(commission_rate=0.0, slippage_bps=0.0)
+    
+    backtester = Backtester(
+        data_feed=feed, 
+        strategy=strategy, 
+        broker=broker, 
+        starting_capital=10000.0, 
+        position_sizer=LeverageSizer()
+    )
+    
+    backtester.run(symbol, TimeFrame.D1)
+    assert backtester.capital < 0
+    assert len(backtester.trades_history) == 2

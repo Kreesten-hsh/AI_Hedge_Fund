@@ -10,6 +10,8 @@ from aegis_trade.infrastructure.strategies.ema_crossover import EmaCrossoverStra
 from aegis_trade.infrastructure.strategies.rsi_mean_reversion import RsiMeanReversionStrategy
 from aegis_trade.infrastructure.strategies.composite import CompositeStrategy
 from aegis_trade.engine.backtester import Backtester
+from aegis_trade.engine.global_risk import GlobalRiskManager
+from decimal import Decimal
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("BT-01 Demo")
@@ -46,7 +48,14 @@ def main():
     broker = SimulatedBroker(commission_rate=0.001, slippage_bps=5.0)
 
     # 4. Backtester
-    backtester = Backtester(data_feed=data_feed, strategy=strategy, broker=broker, starting_capital=100000.0)
+    rm = GlobalRiskManager(max_drawdown=Decimal("0.05"))
+    backtester = Backtester(
+        data_feed=data_feed, 
+        strategy=strategy, 
+        broker=broker, 
+        starting_capital=100000.0,
+        risk_manager=rm
+    )
 
     # 5. Run
     try:

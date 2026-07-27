@@ -17,7 +17,7 @@ L'ordre d'implémentation est strictement linéaire (Pipeline Quantitatif).
 ### PM-01 : Portfolio Management
 - **Objectif** : Implémenter le Portfolio Manager (Sizing, Rééquilibrage).
 - **Priorité** : Haute
-- **Statut** : PLANNED
+- **Statut** : COMPLETED (Note : Le Portfolio Manager réutilise le `GlobalRiskManager` événementiel via adaptateur au lieu d'en recréer un).
 
 ### RM-01 : Risk Management
 - **Objectif** : Implémenter le Risk Manager (Max DD, Exposition Globale, Stop-Loss dynamiques).

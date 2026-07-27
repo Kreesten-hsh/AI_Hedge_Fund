@@ -1,12 +1,16 @@
 import logging
 import pandas as pd
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from aegis_trade.domain.core import Symbol, TimeFrame
 from aegis_trade.domain.ports.data_feed import IDataFeed
 from aegis_trade.domain.strategy import IStrategy
 from aegis_trade.domain.execution import IBroker, OrderIntent, FillEvent
+from aegis_trade.domain.ports.position_sizer import IPositionSizer
 from aegis_trade.engine.performance import PerformanceEngine, TearsheetReport
+from aegis_trade.engine.global_risk import GlobalRiskManager
+from aegis_trade.infrastructure.portfolio.fixed_fractional_sizer import FixedFractionalSizer
+from aegis_trade.infrastructure.risk.global_risk_adapter import GlobalRiskAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -15,10 +19,20 @@ class Backtester:
     Modular orchestrator for historical backtesting.
     Connects DataFeed, Strategy, Broker and Performance Engine.
     """
-    def __init__(self, data_feed: IDataFeed, strategy: IStrategy, broker: IBroker, starting_capital: float = 100000.0):
+    def __init__(
+        self, 
+        data_feed: IDataFeed, 
+        strategy: IStrategy, 
+        broker: IBroker, 
+        starting_capital: float = 100000.0,
+        position_sizer: Optional[IPositionSizer] = None,
+        risk_manager: Optional[GlobalRiskManager] = None
+    ):
         self.data_feed = data_feed
         self.strategy = strategy
         self.broker = broker
+        self.position_sizer = position_sizer or FixedFractionalSizer(0.95)
+        self.risk_manager = risk_manager
         
         self.initial_capital = starting_capital
         self.capital = starting_capital
@@ -30,11 +44,37 @@ class Backtester:
         
         # Hooks for future event-driven architecture
         self.event_bus = None
-        self.risk_manager = None
         
-    def _run_risk_manager_hook(self):
+        self._risk_adapter = GlobalRiskAdapter(risk_manager) if risk_manager else None
+        
+    def _run_risk_manager_hook(self, intent: OrderIntent) -> bool:
         """Hook for global risk management (Exposure, Max DD constraints)."""
-        pass
+        if not self._risk_adapter:
+            return True
+            
+        current_equity = list(self.equity_curve.values())[-1] if self.equity_curve else self.capital
+            
+        is_approved, reason = self._risk_adapter.validate_intent(
+            intent=intent,
+            current_capital=float(current_equity),
+            initial_capital=self.initial_capital,
+            equity_curve=self.equity_curve,
+            current_position=self.position
+        )
+        
+        if not is_approved:
+            logger.warning(f"Order intent rejected by Global Risk Manager: {reason}")
+            self.trades_history.append({
+                'timestamp': intent.timestamp,
+                'pnl': 0.0,
+                'turnover': 0.0,
+                'exposure': 1 if self.position != 0 else 0,
+                'rejected': True,
+                'reason': reason
+            })
+            return False
+            
+        return True
         
     def _run_event_bus_hook(self):
         """Hook for asynchronous event publishing."""
@@ -71,11 +111,7 @@ class Backtester:
             for sig in signals:
                 if sig.direction == 1 and self.position <= 0:
                     # Buy
-                    qty = (self.capital * 0.95) / current_price # risk 95%
-                    # If we are short, we need to buy to cover first, but we keep it simple here:
-                    # just go long. If we were short, we just buy 2x qty.
-                    # Simplification: we close current pos and open new.
-                    target_qty = qty
+                    target_qty = self.position_sizer.size(sig, self.capital, current_price)
                     order_qty = target_qty - self.position
                     
                     intent = OrderIntent(
@@ -84,14 +120,15 @@ class Backtester:
                     )
                     
                     # 4. Execution
-                    fill = self.broker.execute_order(intent)
-                    if fill:
-                        self._process_fill(fill, current_price)
+                    if self._run_risk_manager_hook(intent):
+                        fill = self.broker.execute_order(intent)
+                        if fill:
+                            if not self._process_fill(fill, current_price):
+                                break
                         
                 elif sig.direction == -1 and self.position >= 0:
                     # Sell/Short
-                    qty = (self.capital * 0.95) / current_price
-                    target_qty = -qty
+                    target_qty = -self.position_sizer.size(sig, self.capital, current_price)
                     order_qty = abs(target_qty - self.position)
                     
                     intent = OrderIntent(
@@ -99,9 +136,11 @@ class Backtester:
                         target_price=current_price, timestamp=timestamp
                     )
                     
-                    fill = self.broker.execute_order(intent)
-                    if fill:
-                        self._process_fill(fill, current_price)
+                    if self._run_risk_manager_hook(intent):
+                        fill = self.broker.execute_order(intent)
+                        if fill:
+                            if not self._process_fill(fill, current_price):
+                                break
                         
                 elif sig.direction == 0 and self.position != 0:
                     # Close position
@@ -112,9 +151,11 @@ class Backtester:
                         target_price=current_price, 
                         timestamp=timestamp
                     )
-                    fill = self.broker.execute_order(intent)
-                    if fill:
-                        self._process_fill(fill, current_price)
+                    if self._run_risk_manager_hook(intent):
+                        fill = self.broker.execute_order(intent)
+                        if fill:
+                            if not self._process_fill(fill, current_price):
+                                break
 
         # 5. Performance Metrics
         logger.info("Computing performance metrics...")
@@ -125,8 +166,8 @@ class Backtester:
         tearsheet = perf_engine.compute_tearsheet(equity_series, trades_df)
         return tearsheet
         
-    def _process_fill(self, fill: FillEvent, current_market_price: float):
-        """Update internal accounting (Portfolio)."""
+    def _process_fill(self, fill: FillEvent, current_market_price: float) -> bool:
+        """Update internal accounting (Portfolio). Returns True if valid, False if ruined."""
         signed_qty = fill.quantity * fill.direction
         
         # Realized PnL logic
@@ -145,6 +186,8 @@ class Backtester:
         new_position = self.position + signed_qty
         if new_position == 0:
             self.average_price = 0.0
+        elif self.position == 0:
+            self.average_price = fill.fill_price
         elif (self.position > 0 and fill.direction > 0) or (self.position < 0 and fill.direction < 0):
             # Adding to position
             total_value = abs(self.position * self.average_price) + (fill.quantity * fill.fill_price)
@@ -162,3 +205,9 @@ class Backtester:
             'turnover': fill.quantity * fill.fill_price,
             'exposure': 1 if self.position != 0 else 0
         })
+        
+        if self.capital < 0:
+            logger.error("RUIN: capital go négatif, arrêt de la simulation")
+            return False
+            
+        return True

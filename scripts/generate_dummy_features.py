@@ -21,8 +21,27 @@ def main():
     base_time = datetime(2023, 1, 1, tzinfo=timezone.utc)
     
     returns = np.random.normal(0, 0.02, 100)
+    # Simulate a price series to derive realistic EMAs
+    price = 100.0
+    prices = []
+    for r in returns:
+        price *= (1 + r)
+        prices.append(price)
+    prices_arr = np.array(prices)
+
+    # Compute EMAs from the price series
+    def ema(series: np.ndarray, span: int) -> np.ndarray:
+        alpha = 2.0 / (span + 1)
+        out = np.empty_like(series)
+        out[0] = series[0]
+        for j in range(1, len(series)):
+            out[j] = alpha * series[j] + (1 - alpha) * out[j - 1]
+        return out
+
+    ema_10_arr = ema(prices_arr, 10)
+    ema_50_arr = ema(prices_arr, 50)
+
     for i in range(100):
-        # future return is i+1
         ret_1d = float(returns[i])
         
         # some dummy features
@@ -37,7 +56,10 @@ def main():
                 "return_1d": ret_1d,
                 "rsi_14": 50.0 + f1 * 10,
                 "macd_signal": f2,
-                "volatility_20": abs(f1)
+                "volatility_20": abs(f1),
+                "ema_10": float(ema_10_arr[i]),
+                "ema_50": float(ema_50_arr[i]),
+                "close_price": float(prices_arr[i]),
             }
         )
         features.append(fs)

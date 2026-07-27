@@ -12,7 +12,7 @@ L'ordre d'implémentation est strictement linéaire (Pipeline Quantitatif).
 ### ST-01 : Strategy Framework
 - **Objectif** : Créer l'architecture de stratégies hiérarchiques (Core, Composites).
 - **Priorité** : Haute
-- **Statut** : PLANNED
+- **Statut** : COMPLETED
 
 ### PM-01 : Portfolio Management
 - **Objectif** : Implémenter le Portfolio Manager (Sizing, Rééquilibrage).

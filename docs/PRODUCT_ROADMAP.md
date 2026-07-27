@@ -1,114 +1,46 @@
 # Product Roadmap — Aegis Quant OS
 
-La feuille de route définit les jalons de développement d'Aegis Quant OS pour combler les écarts architecturaux identifiés. Elle abandonne toute terminologie commerciale (MVP, V1, V2) au profit de Phases techniques séquentielles (Phase 4, Phase 5...), garantissant que l'on construit brique par brique ce système de trading personnel.
+La feuille de route définit les jalons de développement d'Aegis Quant OS. 
+Suite à l'audit de maturité produit, la roadmap a été restructurée pour se concentrer sur la création d'un système de trading quantitatif personnel exploitable (Hedge Fund personnel), en écartant toute logique SaaS ou commerciale.
 
----
-
-## Phase 4 : Data & Feature Pipelines (Fondations des Données)
-
+## Sprint 1 : Validation Framework (Mission VA-01)
 ### Objectif
-Mettre en place une source de vérité unique pour les données de marché et standardiser l'extraction des signaux quantitatifs pour l'IA.
+Construire un laboratoire de validation quantitatif (Walk-Forward, Hold-Out, Monte Carlo, Benchmark) pour tester automatiquement la robustesse d'une stratégie avant toute intégration ML.
+### Contraintes
+- Ne pas modifier les moteurs existants (Backtester, Portfolio, Risk). Le Framework de Validation est un orchestrateur.
+### Critères de réussite
+- Production d'un rapport de validation JSON générant un "Strategy Score".
 
-### Livrables
-- Intégration officielle complète avec **OpenBB** (Market Data unifié).
-- Architecture de **Data Pipeline** (Stockage local Parquet / DuckDB pour l'historique time-series).
-- **Feature Engine** formel (Connecté à Qlib) pour la standardisation des features techniques (RSI, ATR, Volatilité) indépendamment de la logique de trading.
-
-### Dépendances
-- Infrastructure LLM validée (Phase 3 - Terminée).
-
-### Risques
-- Saturation des limites de requêtes API (Rate limits) lors du backfill massif. Solution : Mise en cache agressive.
-
-### Critères d'acceptation
-- Le `DatasetEngine` est remplacé ou complété par un Data Pipeline capable de télécharger, nettoyer et stocker des milliers de bougies (Marketbars) automatiquement.
-- Les Stratégies ne calculent plus manuellement l'ATR ou le RSI, elles le lisent via le Feature Engine.
-- **DISCIPLINE SCIENTIFIQUE** : Aucune feature ou signal ne peut être consommé par un Agent (Phase 7) ou une Stratégie tant qu'il n'a pas passé les critères IC et une validation Holdout dédiée, documentés dans un rapport reproductible.
-
----
-
-## Phase 5 : Control Center (Le Dashboard Local)
-
+## Sprint 2 : Intégration Qlib (Mission QL-01)
 ### Objectif
-Créer l'interface visuelle (Le Centre de Contrôle) permettant de superviser les moteurs (Risque, Portefeuille, IA) sans interagir directement dans le terminal.
+Brancher Microsoft Qlib comme moteur d'accélération pour la recherche de signaux et les backtests vectorisés.
+### Contraintes
+- Qlib ne doit **jamais** calculer les indicateurs techniques (EMA, RSI, etc.). Ces derniers appartiennent au `FeatureEngine` d'Aegis.
+- Qlib consomme uniquement les données du `FeatureStore` pré-calculé.
+### Critères de réussite
+- Les modèles ML de Qlib peuvent être entraînés sur les features générées par Aegis.
 
-### Livrables
-- Spécifications techniques du Dashboard (React/FastAPI ou Streamlit).
-- Base de données locale de journalisation (Trade Journal persisté).
-- Dashboard opérationnel (Lecture seule dans un premier temps) affichant PnL, Positions et Historique des Décisions IA.
-
-### Dépendances
-- Phase 4.
-
-### Risques
-- Dérive technologique vers un outil Web lourd. La contrainte "Local-First" doit prévaloir.
-
-### Critères d'acceptation
-- Le Dashboard tourne localement et affiche l'état réel des objets `PortfolioEngine` et `RiskEngine`.
-- L'utilisateur peut voir les décisions prises par l'IA et le "pourquoi".
-
----
-
-## Phase 6 : Paper Trading & Brokers (Execution Engine)
-
+## Sprint 3 : Moteur d'Exécution (Mission EX-01 - Paper Trading)
 ### Objectif
-Brancher Aegis Quant OS sur un environnement d'exécution simulé (Paper Trading) via un broker, puis préparer le routage Live.
+Remplacer le broker simulé par une connexion à un environnement de Paper Trading réel via vn.py ou MetaTrader 5 (MT5).
+### Contraintes
+- L'adaptateur de broker doit s'intégrer de manière transparente derrière le `PortfolioEngine` et le `RiskEngine`.
+### Critères de réussite
+- Les ordres générés en local sont exécutés et réconciliés sur un compte de démonstration MT5/vn.py.
 
-### Livrables
-- Implémentation de l'**Execution Engine**.
-- Intégration formelle avec l'API **vn.py** ou Interactive Brokers.
-- Mécanique de Slippage simulé.
-
-### Dépendances
-- Phase 4 (Données live requises) et Phase 5 (Pour le monitoring des exécutions).
-
-### Risques
-- Asynchronisme des flux de brokers (WebSockets vs REST). Le bus d'événements doit être extrêmement robuste.
-
-### Critères d'acceptation
-- Un ordre généré par le `PortfolioEngine` et validé par le `RiskEngine` est routé vers un compte de Paper Trading et réconcilié correctement au retour.
-
----
-
-## Phase 7 : Échelle IA & Cloud LLM
-
+## Sprint 4 : Le Centre de Contrôle (Mission LIVE-01 - Dashboard)
 ### Objectif
-Démultiplier la puissance de décision en intégrant de vrais LLMs asynchrones Cloud (OpenAI, Claude) pour le Macro et le Fondamental, gardant les modèles locaux pour le haut-débit (Technique/Risque).
+Construire l'interface visuelle locale (Dashboard) pour superviser le système sans utiliser le terminal.
+### Contraintes
+- Architecture Local-First (Aucun portail web public).
+- Doit afficher : Equity Curve, Drawdown, Positions, Statistiques de performance (Sharpe, Sortino), et les décisions des agents IA.
+### Critères de réussite
+- Un utilisateur peut monitorer les trades en temps réel et déclencher le Kill Switch manuellement depuis le Dashboard.
 
-### Livrables
-- Adapters pour OpenAI, Anthropic (Claude), vLLM.
-- AI Council asynchrone (Exécution concurrente des agents de recherche).
-- Modèles prédictifs croisés (FinGPT).
-
-### Dépendances
-- Phase 6.
-- Toute feature/agent utilisant un signal macro doit référencer le rapport de validation IC correspondant.
-
-### Risques
-- Dérive des coûts liés aux appels d'API LLM Cloud.
-- Temps de latence incompatibles avec le trading court-terme.
-
-### Critères d'acceptation
-- L'utilisateur peut utiliser Ollama pour le *Risk Analyst* et Claude pour le *Macro Analyst* simultanément.
-- Le Cache de Décision prouve son efficacité économique.
-
----
-
-## Phase 8 : Live Trading & Optimisation
-
+## Sprint 5 : Live Trading & Optimisation
 ### Objectif
-Engagement de capital réel sous contrôle strict du Risk Engine.
-
-### Livrables
-- Kill Switch manuel actif depuis le Dashboard.
-- Alerting (Email/Telegram/Discord) en cas d'anomalies.
-- Moteur de réconciliation nocturne des fonds (Account Sync).
-
-### Dépendances
-- Succès validé sur au moins 3 mois en Paper Trading (Phase 6).
-
-### Risques
-- Perte financière due à une anomalie. Le Risk Engine doit être sanctuarisé.
-
-### Critères d'acceptation
-- Ordres exécutés sur le marché réel sans intervention manuelle (autre que la supervision du Dashboard).
+Engagement de capital réel sous le contrôle strict du Risk Engine.
+### Contraintes
+- Déploiement sur un serveur Linux (VPS) fonctionnant 24/7.
+### Critères de réussite
+- Exécution autonome sur le marché réel sans intervention manuelle (hors supervision).

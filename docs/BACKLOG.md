@@ -24,7 +24,12 @@ L'ordre d'implémentation est strictement linéaire (Pipeline Quantitatif).
 - **Priorité** : Haute
 - **Statut** : COMPLETED
 
-## Phase 2 : Alpha Avancé & Machine Learning
+## Phase 2 : Validation Scientifique & Machine Learning
+
+### VA-01 : Institutional Validation Framework
+- **Objectif** : Construire un laboratoire de validation (Walk-Forward, Hold-Out, Monte Carlo, Benchmark) pour tester la robustesse économique des stratégies avant le ML.
+- **Priorité** : Critique
+- **Statut** : PLANNED
 
 ### QL-01 : Qlib Adapter
 - **Objectif** : Intégrer Microsoft Qlib pour un backtesting factoriel à ultra-haute vitesse.

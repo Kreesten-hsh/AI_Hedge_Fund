@@ -1,85 +1,79 @@
 # Architecture Système — Aegis Quant OS
 
 Aegis Quant OS repose sur une **Architecture Hexagonale (Ports et Adapters)** couplée au **Domain Driven Design (DDD)**. 
-L'objectif est d'isoler strictement la logique de trading (Domain & Engine) des détails d'implémentation (Data Providers, Brokers, LLMs, UIs).
+L'objectif est d'isoler strictement la logique de trading (Domain & Engine) des détails d'implémentation externes (Data Providers, Brokers, LLMs, UIs). 
+Les frameworks externes (Qlib, OpenBB) ne sont que des moteurs spécialisés, ils ne possèdent jamais la logique métier.
 
-## Vue d'Ensemble de l'Architecture (Big Picture)
+## Pipeline Quantitatif Officiel
 
-Le schéma ci-dessous illustre le flux de données de bout en bout, depuis l'ingestion des données jusqu'à l'exécution des ordres, en passant par l'analyse IA. 
-Le **Dashboard local** est branché transversalement sur toutes les couches pour offrir une supervision complète.
+Le schéma ci-dessous illustre le flux de données validé, de bout en bout.
 
 ```mermaid
 graph TD
-    %% Providers Extérieurs (Data & ML)
-    OpenBB[OpenBB / Polygon] -->|Market Data| DataPipeline[Data Pipeline]
+    %% Source
+    OpenBB[OpenBB] -->|Market Data| MarketDataPipeline[Market Data Pipeline]
     
-    %% Core Engines
-    DataPipeline --> FeatureEngine[Feature Engine / Qlib]
-    FeatureEngine -->|Signaux & Features| AICouncil[AI Council]
+    %% Stockage Local
+    MarketDataPipeline --> DataLake[(Data Lake Parquet)]
     
-    %% AI Council Sub-Agents
-    subgraph AICouncil [AI Council (Agents Multiples)]
-        MacroAnalyst[Macro Analyst]
-        RiskAnalyst[Risk Analyst]
-        TechnicalAnalyst[Technical Analyst]
-        Synthesizer[Synthesizer]
-        
-        MacroAnalyst --> Synthesizer
-        RiskAnalyst --> Synthesizer
-        TechnicalAnalyst --> Synthesizer
-    end
+    %% Calculs Propriétaires
+    DataLake --> FeatureEngine[Feature Engine Aegis]
+    FeatureEngine --> FeatureStore[(Feature Store)]
     
-    %% LLM Providers
-    LLMs[(LLM Providers)] -.->|Ollama / vLLM / Claude| AICouncil
+    %% Recherche et Backtest
+    FeatureStore --> AlphaResearch[Alpha Research Engine]
+    AlphaResearch --> EventDrivenBacktester[Event-Driven Backtester]
     
-    %% Trading Logic
-    AICouncil -->|Décision| Portfolio[Portfolio Engine]
-    Portfolio -->|Ordre Proposé| Risk[Risk Engine]
+    %% Validation Scientifique
+    EventDrivenBacktester --> ValidationFramework[Institutional Validation Framework]
     
-    %% Execution
-    Risk -->|Ordre Validé| Execution[Execution Engine]
-    Execution --> Gateway[Broker Gateway]
+    %% Accélérateur ML
+    ValidationFramework -.-> Qlib[Microsoft Qlib]
+    FeatureStore -.-> Qlib
     
-    %% External Brokers
-    Gateway -->|vn.py / IB| Brokers[(Brokers Réels)]
+    %% Exécution
+    ValidationFramework --> PaperTrading[Paper Trading]
+    PaperTrading --> LiveTrading[Live Trading]
     
-    %% Dashboard (Transverse)
-    Dashboard((Dashboard Local))
-    Dashboard -.->|Supervise| DataPipeline
-    Dashboard -.->|Supervise| FeatureEngine
-    Dashboard -.->|Supervise| AICouncil
-    Dashboard -.->|Supervise| Portfolio
-    Dashboard -.->|Supervise| Risk
-    Dashboard -.->|Supervise| Execution
+    %% Passerelle Broker
+    LiveTrading --> Gateway[MT5 / vn.py Gateway]
+    Gateway --> Broker[(Broker)]
+    
+    %% Dashboard
+    Dashboard((Dashboard Local)) -.->|Supervise| EventDrivenBacktester
+    Dashboard -.->|Supervise| LiveTrading
     
     classDef domain fill:#0f172a,stroke:#3b82f6,stroke-width:2px,color:#fff;
     classDef external fill:#475569,stroke:#94a3b8,stroke-width:1px,color:#fff;
     classDef transverse fill:#166534,stroke:#22c55e,stroke-width:2px,color:#fff;
     
-    class AICouncil,Portfolio,Risk,Execution,FeatureEngine,DataPipeline domain;
-    class OpenBB,Brokers,LLMs external;
+    class FeatureEngine,AlphaResearch,EventDrivenBacktester,PaperTrading,LiveTrading domain;
+    class OpenBB,Qlib,Gateway,Broker external;
     class Dashboard transverse;
 ```
 
-## Les 6 Composants Majeurs
+## Les Couches Majeures
 
-### 1. Data Pipeline
-Responsable de l'ingestion, du nettoyage et de l'harmonisation temporelle des données. Il agit comme un cache local (base de données time-series ou Parquet) pour minimiser la latence réseau et les coûts d'API. Il abstrait les sources externes (OpenBB, Polygon, Yahoo).
+### 1. Market Data Pipeline & Data Lake
+Extrait la donnée brute via OpenBB, la valide et la stocke de manière performante au format Parquet pour éviter de re-télécharger l'historique en boucle.
 
-### 2. Feature Engine
-Transforme les données brutes en *features* (indicateurs techniques, sentiments, modèles statistiques). Il intègre des moteurs avancés comme **Qlib** pour générer des alphas prédictifs qui nourriront l'IA.
+### 2. Feature Engine (100% Propriétaire)
+Calcule les indicateurs techniques (EMA, RSI, MACD, etc.) en pur Python/Pandas/Numpy. Les dépendances externes comme TA-Lib ou Qlib ne sont **jamais** utilisées ici. Aegis possède sa propre mathématique.
 
-### 3. AI Council
-L'orchestrateur de l'intelligence artificielle. Il sollicite plusieurs agents spécialisés (Macro, Risque, Fondamental, Technique) qui analysent le contexte du marché indépendamment. Un `Synthesizer` rassemble ensuite leurs rapports pour générer une **Décision du Conseil** (ex: LONG, SHORT, WAIT, CLOSE).
+### 3. Alpha Research Engine
+Évalue la puissance prédictive des features (IC Pearson, IC Spearman, Information Ratio) générées par le Feature Engine pour trier le bruit du signal.
 
-### 4. Portfolio Engine
-Gère l'état global du portefeuille (capital, positions ouvertes, marges). Il traduit la décision de l'AI Council en un **dimensionnement de position** concret (Sizing) selon la volatilité actuelle et l'allocation cible.
+### 4. Event-Driven Backtester
+Le moteur de simulation qui intègre le `PortfolioEngine` (Sizing) et le `GlobalRiskManager` (Kill Switch). Il rejoue l'historique tick par tick ou barre par barre.
 
-### 5. Risk Engine
-Le gendarme du système. Il vérifie toute transaction proposée par le Portfolio Engine par rapport à des règles strictes (Max Drawdown, Corrélation sectorielle, Exposition maximale). Il possède le **Kill Switch** global.
+### 5. Institutional Validation Framework
+Le laboratoire scientifique de validation. Il orchestre le Backtester sur de multiples scénarios (Walk-Forward, Hold-Out, Multi-Market, Monte Carlo) pour évaluer la robustesse statistique et économique d'une stratégie et générer un score global, avant de l'approuver pour la production ou le ML.
 
-### 6. Execution Engine & Gateway
-Gère la transmission des ordres au broker (via vn.py, Interactive Brokers, etc.). Il s'occupe de la logique de passage d'ordre (Limit, Market, VWAP), du slippage, et de la réconciliation des statuts d'ordres.
+### 6. Microsoft Qlib (Accélérateur)
+Utilisé **uniquement** pour la recherche et l'entraînement de modèles de Machine Learning. Qlib consomme le Feature Store d'Aegis, il ne produit pas ses propres features. Il n'est déployé que sur des stratégies ayant survécu à la Validation Institutionnelle.
 
-## Le Dashboard : Centre de Contrôle
-Il s'agit de l'interface utilisateur unique du système (sans vocation SaaS). Le Dashboard ne contient **aucune logique métier**. Il se contente de lire l'état des différents moteurs via une API (FastAPI) pour l'afficher à l'opérateur (React/Streamlit), et permet d'intervenir manuellement (Kill Switch, fermeture forcée de positions).
+### 7. Execution Gateway
+La couche anti-corruption pour communiquer avec les brokers finaux (vn.py, MT5).
+
+### 8. Dashboard (Centre de Contrôle)
+Une interface de supervision locale permettant de lire l'état de l'Equity, du Drawdown, des positions et du Risk Manager. Aucune logique métier n'y réside.

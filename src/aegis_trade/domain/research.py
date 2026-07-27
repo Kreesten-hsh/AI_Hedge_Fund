@@ -53,3 +53,108 @@ class AlphaResearchResult:
     # Ranked lists of features by their final score
     top_features: List[str]
     bottom_features: List[str]
+
+from typing import Any
+from uuid import uuid4
+from enum import Enum
+from aegis_trade.domain.validation import ValidationArtifact
+
+class ExperimentStatus(str, Enum):
+    CREATED = "CREATED"
+    QUEUED = "QUEUED"
+    RUNNING = "RUNNING"
+    VALIDATING = "VALIDATING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    ARCHIVED = "ARCHIVED"
+
+class PromotionStatus(str, Enum):
+    RESEARCH = "RESEARCH"
+    VALIDATED = "VALIDATED"
+    CANDIDATE = "CANDIDATE"
+    APPROVED = "APPROVED"
+    PAPER_TRADING = "PAPER_TRADING"
+
+@dataclass(frozen=True)
+class ExperimentMetadata:
+    """
+    Métadonnées immuables garantissant la traçabilité d'une expérience de recherche.
+    """
+    id: str = field(default_factory=lambda: str(uuid4()))
+    timestamp: datetime = field(default_factory=lambda: datetime.utcnow())
+    strategy_name: str = ""
+    parameters: Dict[str, Any] = field(default_factory=dict)
+    features: List[str] = field(default_factory=list)
+    markets: List[str] = field(default_factory=list)
+    timeframes: List[str] = field(default_factory=list)
+    seed: int = 42
+    git_commit: str = "unknown"
+    config_version: str = "1.0"
+    model_version: str = "1.0"
+    parent_id: Optional[str] = None
+    author: str = "system"
+
+@dataclass(frozen=True)
+class ExperimentConfig:
+    """
+    Configuration de l'expérience, incluant les paramètres pour le backtester et la validation.
+    """
+    strategy_class_name: str
+    strategy_kwargs: Dict[str, Any]
+    validation_config_dict: Dict[str, Any]
+    data_sources: List[str]
+
+@dataclass
+class ExperimentResult:
+    """
+    Résultat d'une expérience contenant le rapport de validation.
+    """
+    validation_artifact: Optional[ValidationArtifact] = None
+    execution_time_seconds: float = 0.0
+    error_message: Optional[str] = None
+    
+    @property
+    def passed(self) -> bool:
+        if self.validation_artifact:
+            return self.validation_artifact.report.is_approved
+        return False
+        
+    @property
+    def score(self) -> float:
+        if self.validation_artifact:
+            return self.validation_artifact.report.strategy_score
+        return 0.0
+
+@dataclass
+class ResearchExperiment:
+    """
+    Agrégat métier principal du laboratoire de recherche.
+    Combine Configuration, Métadonnées, et Résultats.
+    """
+    metadata: ExperimentMetadata
+    config: ExperimentConfig
+    result: ExperimentResult = field(default_factory=ExperimentResult)
+    status: ExperimentStatus = ExperimentStatus.CREATED
+    promotion_status: PromotionStatus = PromotionStatus.RESEARCH
+    
+    def transition_status(self, new_status: ExperimentStatus):
+        """Vérifie que la transition est autorisée grossièrement."""
+        # Simple gardien pour l'instant
+        if self.status == ExperimentStatus.ARCHIVED:
+            raise ValueError("Cannot transition out of ARCHIVED status.")
+        self.status = new_status
+        
+    def transition_promotion(self, new_status: PromotionStatus):
+        """Met à jour le statut de promotion."""
+        if not self.result.passed and new_status in [PromotionStatus.CANDIDATE, PromotionStatus.APPROVED, PromotionStatus.PAPER_TRADING]:
+            raise ValueError("Cannot promote an experiment that failed validation.")
+        self.promotion_status = new_status
+
+    def mark_completed(self, validation_artifact: ValidationArtifact, execution_time: float):
+        self.result.validation_artifact = validation_artifact
+        self.result.execution_time_seconds = execution_time
+        self.transition_status(ExperimentStatus.COMPLETED)
+
+    def mark_failed(self, error_message: str):
+        self.result.error_message = error_message
+        self.transition_status(ExperimentStatus.FAILED)

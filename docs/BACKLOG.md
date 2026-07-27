@@ -20,9 +20,9 @@ L'ordre d'implémentation est strictement linéaire (Pipeline Quantitatif).
 - **Statut** : COMPLETED (Note : Le Portfolio Manager réutilise le `GlobalRiskManager` événementiel via adaptateur au lieu d'en recréer un).
 
 ### RM-01 : Risk Management
-- **Objectif** : Implémenter le Risk Manager (Max DD, Exposition Globale, Stop-Loss dynamiques).
+- **Objectif** : RM-01 : fonctionnalité couverte par la réunification PM-01 (GlobalRiskAdapter). Pas de mission dédiée nécessaire.
 - **Priorité** : Haute
-- **Statut** : PLANNED
+- **Statut** : COMPLETED
 
 ## Phase 2 : Alpha Avancé & Machine Learning
 

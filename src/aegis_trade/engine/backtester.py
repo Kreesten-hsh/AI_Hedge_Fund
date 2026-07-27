@@ -31,7 +31,13 @@ class Backtester:
         self.data_feed = data_feed
         self.strategy = strategy
         self.broker = broker
-        self.position_sizer = position_sizer or FixedFractionalSizer(0.95)
+        if position_sizer:
+            self.position_sizer = position_sizer
+        else:
+            if risk_manager:
+                self.position_sizer = FixedFractionalSizer(fraction=0.95, max_allowed_fraction=float(risk_manager.max_concentration))
+            else:
+                self.position_sizer = FixedFractionalSizer(fraction=0.95)
         self.risk_manager = risk_manager
         
         self.initial_capital = starting_capital

@@ -18,10 +18,26 @@ def setup_registry():
     
 @pytest.fixture
 def pipeline():
+    mock_storage = MagicMock()
+    mock_storage.get_latest_timestamp.return_value = None
+    
+    saved_bars = []
+    def mock_save(*args, **kwargs):
+        bars = args[2] if len(args) > 2 else kwargs.get('new_bars', [])
+        saved_bars.extend(bars)
+        return saved_bars
+        
+    def mock_load(*args, **kwargs):
+        return saved_bars
+        
+    mock_storage.save_and_merge_bars.side_effect = mock_save
+    mock_storage.load_bars.side_effect = mock_load
+    
     return MarketDataPipeline(
         cache_backend=MemoryCache(),
         validator=DataValidator(),
-        normalizer=DataNormalizer()
+        normalizer=DataNormalizer(),
+        storage=mock_storage
     )
 
 @pytest.fixture

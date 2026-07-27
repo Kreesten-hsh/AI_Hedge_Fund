@@ -14,6 +14,10 @@ class CacheError(Exception):
     """Raised when a cache operation fails."""
     pass
 
+class StorageError(Exception):
+    """Raised when a storage (e.g. Parquet data lake) operation fails."""
+    pass
+
 class PipelineError(Exception):
     """Raised when the overall pipeline execution fails unexpectedly."""
     pass

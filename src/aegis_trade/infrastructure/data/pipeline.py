@@ -10,6 +10,7 @@ from aegis_trade.infrastructure.data.registry import ProviderRegistry
 from aegis_trade.infrastructure.data.validator import DataValidator
 from aegis_trade.infrastructure.data.normalizer import DataNormalizer
 from aegis_trade.infrastructure.data.cache import CacheBackend
+from aegis_trade.infrastructure.data.parquet_storage import ParquetStorage
 
 logger = logging.getLogger(__name__)
 
@@ -23,11 +24,13 @@ class MarketDataPipeline:
         self,
         cache_backend: CacheBackend,
         validator: DataValidator,
-        normalizer: DataNormalizer
+        normalizer: DataNormalizer,
+        storage: Optional[ParquetStorage] = None
     ):
         self.cache = cache_backend
         self.validator = validator
         self.normalizer = normalizer
+        self.storage = storage or ParquetStorage()
 
     def fetch_ohlcv(
         self, 
@@ -77,41 +80,60 @@ class MarketDataPipeline:
             except Exception as e:
                 logger.warning(f"Cache get failed: {e}. Falling back to API.")
 
-        # 1. Ingestion
-        provider = ProviderRegistry.get(provider_name)
-        try:
-            raw_bars = provider.fetch_ohlcv(symbol, timeframe, start, end)
-        except DataProviderError:
-            raise
-        except Exception as e:
-            raise PipelineError(f"Unexpected ingestion failure: {e}") from e
-            
-        if not raw_bars:
-            logger.info(f"Pipeline: Provider returned empty data for {symbol.name}")
-            return [], DataContext(
-                provider=provider_name, symbol=symbol, timeframe=timeframe,
-                timezone="UTC", source="api", retrieved_at=retrieved_at,
-                latency=time.perf_counter() - start_time, cache_hit=False
-            )
+        # 1. Delta Sync (Data Lake)
+        latest_ts = self.storage.get_latest_timestamp(symbol, timeframe)
+        
+        fetch_required = True
+        if latest_ts and latest_ts >= end:
+            fetch_required = False
+            delta_start = start
+        else:
+            if latest_ts and latest_ts > start:
+                delta_start = latest_ts
+            else:
+                delta_start = start
+                
+        if fetch_required:
+            provider = ProviderRegistry.get(provider_name)
+            try:
+                raw_bars = provider.fetch_ohlcv(symbol, timeframe, delta_start, end)
+            except DataProviderError:
+                raise
+            except Exception as e:
+                raise PipelineError(f"Unexpected ingestion failure: {e}") from e
+                
+            if raw_bars:
+                # 2. Validation
+                try:
+                    validated_bars = self.validator.validate_ohlcv(raw_bars)
+                except ValidationError:
+                    raise
+                except Exception as e:
+                    raise PipelineError(f"Unexpected validation failure: {e}") from e
 
-        # 2. Validation
+                # 3. Normalization
+                try:
+                    normalized_delta = self.normalizer.normalize_ohlcv(validated_bars)
+                except NormalizationError:
+                    raise
+                except Exception as e:
+                    raise PipelineError(f"Unexpected normalization failure: {e}") from e
+                    
+                # 4. Save to Parquet
+                try:
+                    self.storage.save_and_merge_bars(symbol, timeframe, normalized_delta)
+                except Exception as e:
+                    logger.warning(f"Failed to save to parquet: {e}")
+                    
+        # Load unified history from Parquet and filter by requested range
         try:
-            validated_bars = self.validator.validate_ohlcv(raw_bars)
-        except ValidationError:
-            raise
+            full_history = self.storage.load_bars(symbol, timeframe)
+            normalized_bars = [b for b in full_history if start <= b.timestamp <= end]
         except Exception as e:
-            raise PipelineError(f"Unexpected validation failure: {e}") from e
+            raise PipelineError(f"Failed to load unified history from Parquet: {e}") from e
 
-        # 3. Normalization
-        try:
-            normalized_bars = self.normalizer.normalize_ohlcv(validated_bars)
-        except NormalizationError:
-            raise
-        except Exception as e:
-            raise PipelineError(f"Unexpected normalization failure: {e}") from e
-
-        # 4. Cache
-        if use_cache:
+        # 5. Cache
+        if use_cache and normalized_bars:
             try:
                 self.cache.set(cache_key, normalized_bars)
             except Exception as e:

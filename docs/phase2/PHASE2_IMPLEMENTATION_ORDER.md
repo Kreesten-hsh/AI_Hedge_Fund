@@ -10,21 +10,18 @@
 2. **AI-01 : Memory Engine** *(Terminé)*
    - *Pré-requis :* Validation de `EXPERIENCE_MEMORY_SPEC.md`
    - *Implémentation :* FAISS, Base Vectorielle.
-3. **AI-02 : Reflection Engine**
-   - *Pré-requis :* Validation AI-01, Modèles Kronos/FinGPT définis.
-   - *Implémentation :* Feature extraction, boucle post-trade.
-4. **AI-03 : Reinforcement Learning**
-   - *Pré-requis :* Validation AI-02, `RL_LEARNING_SPEC.md`.
-   - *Implémentation :* Custom Gym Environment, Reward Function.
-5. **AI-04 : Multi Agent Council**
-   - *Pré-requis :* Validation AI-03, `MULTI_AGENT_COUNCIL.md`.
-   - *Implémentation :* Prompting, Voting system, Risk Veto.
-6. **AI-05 : Demo Training**
-   - *Pré-requis :* Assemblage AI-01 à AI-04.
-   - *Implémentation :* Exécution Paper Trading HFT continue, remplissage du `RESEARCH_LOGBOOK.md`.
-7. **AI-06 : Performance Validation**
-   - *Pré-requis :* > 5000 expériences enregistrées.
-   - *Implémentation :* Audit mathématique des résultats.
-8. **AI-07 : Live Trading**
-   - *Pré-requis :* Validation de la survie (Zéro risque de ruine détecté).
-   - *Implémentation :* Dépôt de capital réel.
+3. **AI-03 : Reasoning Engine**
+   - *Pré-requis :* Validation AI-02, `REASONING_ENGINE_SPEC.md`, `KNOWLEDGE_SYSTEM.md`.
+   - *Implémentation :* Quality Analyzer, Cluster Engine (DBSCAN), LLM Adapter (Ollama), Knowledge Validator.
+4. **AI-04 : Reinforcement Learning**
+   - *Pré-requis :* Validation AI-03, Base de connaissances établie.
+   - *Implémentation :* Custom Gym Environment, Policy Improvement.
+5. **AI-05 : Multi Agent Council**
+   - *Pré-requis :* Validation AI-04, Modèles de RL fonctionnels.
+   - *Implémentation :* Prompting, Voting system, Risk Veto basé sur la Knowledge Base.
+6. **AI-06 : Performance Validation**
+   - *Pré-requis :* Assemblage AI-01 à AI-05.
+   - *Implémentation :* Historical Validation, Replay Validation, Paper Trading, Shadow Trading.
+7. **AI-07 : Live Trading**
+   - *Pré-requis :* Validation de la survie (Zéro risque de ruine détecté en Shadow Trading).
+   - *Implémentation :* Micro Capital puis Production Scale-up.

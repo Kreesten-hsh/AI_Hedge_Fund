@@ -8,14 +8,17 @@ Le développement de la Phase 2 est séquencé en 7 missions strictement interd�
 ## AI-02 : Reflection Engine
 **Objectif :** Créer la boucle post-trade (Feature Engineering, Storage).
 
-## AI-03 : Reinforcement Learning
-**Objectif :** Intégrer FinRL pour l'optimisation des poids de décision.
+## AI-03 : Reasoning Engine
+**Objectif :** Transformer les expériences de marché brutes de FAISS en règles métier exploitables, statistiques, versionnées et vérifiables.
 
-## AI-04 : Multi Agent Council
-**Objectif :** Implémenter le comité de prise de décision (Trend, Momentum, Volatility, etc.).
+## AI-04 : Reinforcement Learning
+**Objectif :** Intégrer FinRL pour l'optimisation des poids de décision, en s'appuyant sur la base de connaissances.
+
+## AI-05 : Multi Agent Council
+**Objectif :** Implémenter le comité de prise de décision (Trend, Momentum, Volatility, etc.) en utilisant le Reinforcement Learning et les règles validées par le Reasoning Engine.
 
 ---
-## Pipeline de Validation (AI-05 à AI-07)
+## Pipeline de Validation (AI-06 à AI-07)
 
 Afin d'atteindre le statut d'OS Quantitatif professionnel, la validation suit une montée en charge drastique :
 

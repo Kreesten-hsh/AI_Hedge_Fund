@@ -111,7 +111,7 @@ Ce document détaille l'audit technique de chaque dépôt (actif et inspirationn
 - **Pourquoi ne pas le réécrire nous-mêmes ?** La logique de "State Graph" (qui parle à qui et quand) est déjà modélisée intelligemment ici.
 - **Modules utilisés :** Modélisation LangGraph / AutoGen (Structure sémantique).
 - **Classes :** Concept de `AgentNode`.
-- **Ce que nous gardons :** La structure des prompts (Rôles).
+- **Ce que nous gardons :** La structure des prompts (Rôles) pour structurer le `Knowledge` dans le Reasoning Engine (AI-03).
 - **Ce que nous supprimons :** Le code (Nous réécrivons en Python pur dans notre Domain).
 - **Temps estimé :** 1 Semaine (Inspiration).
 - **RAM/CPU/GPU :** N/A (Code natif).
@@ -147,7 +147,7 @@ Ce document détaille l'audit technique de chaque dépôt (actif et inspirationn
 - **Pourquoi l'utiliser ?** Modèle NLP fine-tuné sur le vocabulaire financier.
 - **Pourquoi ne pas le réécrire nous-mêmes ?** Fine-tuner LLaMA sur des rapports financiers coûte des milliers de dollars en cloud.
 - **Modules utilisés :** HuggingFace Transformers, bitsandbytes (Quantization).
-- **Ce que nous gardons :** Le modèle GGML/GGUF pour exécution locale via `llama.cpp`.
+- **Ce que nous gardons :** Le modèle GGML/GGUF pour exécution locale via `llama.cpp` dans l'adaptateur `OllamaReasoner` du Reasoning Engine (AI-03).
 - **Architecture :** Transformer LLM.
 - **Temps estimé :** 2 Semaines.
 - **RAM/GPU :** 8-16 GB VRAM.

@@ -19,6 +19,7 @@ class EngineEventType(str, Enum):
     POSITION = "position"
     ACCOUNT = "account"
     TRADE = "trade"
+    MEMORY = "memory"
 
 class SignalIntent(str, Enum):
     ENTER_LONG = "enter_long"
@@ -155,3 +156,38 @@ class TradeEvent(EngineEvent):
         object.__setattr__(self, 'event_type', EngineEventType.TRADE)
         super().__post_init__()
 
+# --- Memory / Reflection Events ---
+
+@dataclass(frozen=True)
+class ExperienceSavedEvent(EngineEvent):
+    experience_id: str
+    category: str
+    pnl: Decimal
+    
+    def __post_init__(self) -> None:
+        object.__setattr__(self, 'event_type', EngineEventType.MEMORY)
+        super().__post_init__()
+
+@dataclass(frozen=True)
+class ExperienceRejectedEvent(EngineEvent):
+    reason: str
+    
+    def __post_init__(self) -> None:
+        object.__setattr__(self, 'event_type', EngineEventType.MEMORY)
+        super().__post_init__()
+
+@dataclass(frozen=True)
+class DuplicateExperienceEvent(EngineEvent):
+    experience_id: str
+    
+    def __post_init__(self) -> None:
+        object.__setattr__(self, 'event_type', EngineEventType.MEMORY)
+        super().__post_init__()
+
+@dataclass(frozen=True)
+class MemoryOverflowEvent(EngineEvent):
+    message: str
+    
+    def __post_init__(self) -> None:
+        object.__setattr__(self, 'event_type', EngineEventType.MEMORY)
+        super().__post_init__()

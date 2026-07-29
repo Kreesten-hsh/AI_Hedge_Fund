@@ -41,46 +41,30 @@ def get_dummy_features():
         1,1,1,1,1,0,0,0,0,MarketSession.OTHER,0,False,0,50,0,0,0,0,0,0,0
     )
 
-def test_categorization_success(manager):
-    cat = manager._determine_category(Decimal("10.0"), Decimal("1.0"), {})
-    assert cat == MemoryCategory.SUCCESS
-
-def test_categorization_failure(manager):
-    cat = manager._determine_category(Decimal("-5.0"), Decimal("1.0"), {})
-    assert cat == MemoryCategory.FAILURE
-    
-    cat2 = manager._determine_category(Decimal("1.0"), Decimal("6.0"), {})
-    assert cat2 == MemoryCategory.FAILURE
-
-def test_categorization_near_miss(manager):
-    cat = manager._determine_category(Decimal("-0.5"), Decimal("1.0"), {})
-    assert cat == MemoryCategory.NEAR_MISS
-
-def test_categorization_metadata_override(manager):
-    cat = manager._determine_category(Decimal("10.0"), Decimal("1.0"), {"force_category": "exceptional"})
-    assert cat == MemoryCategory.EXCEPTIONAL
-
 def test_save_experience(manager):
     symbol = Symbol("EURUSD", AssetClass.FOREX)
     features = get_dummy_features()
     
-    exp_id = manager.save_experience(
+    experience = Experience(
+        id="test-123",
         timestamp=datetime(2023, 1, 1, tzinfo=timezone.utc),
         symbol=symbol,
         timeframe=TimeFrame.M1,
-        decision_side=Side.LONG,
         features=features,
+        decision_side=Side.LONG,
         pnl=Decimal("15.0"),
         max_drawdown=Decimal("0.5"),
-        duration_seconds=120
+        duration_seconds=120,
+        category=MemoryCategory.SUCCESS,
+        embedding=(0.1, 0.2)
     )
     
-    assert exp_id is not None
+    exp_id = manager.save_experience(experience)
+    
+    assert exp_id == "test-123"
     assert len(manager._vector_store.saved) == 1
     exp = manager._vector_store.saved[0]
-    assert exp.id == exp_id
-    assert exp.category == MemoryCategory.SUCCESS
-    assert exp.embedding == (0.1, 0.2)
+    assert exp.id == "test-123"
 
 def test_manager_methods(manager):
     # Test convenience methods
@@ -89,7 +73,3 @@ def test_manager_methods(manager):
     manager.get_statistics()
     manager.delete_experience("1")
     manager.archive_experience("1")
-    
-    # Test category fallback (pnl=1.0, drawdown=3.0 -> not success, not failure, not near_miss)
-    cat = manager._determine_category(Decimal("1.0"), Decimal("3.0"), {"force_category": "invalid_cat"})
-    assert cat == MemoryCategory.UNKNOWN

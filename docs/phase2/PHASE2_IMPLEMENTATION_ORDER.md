@@ -16,7 +16,7 @@
 4. **AI-04 : Reinforcement Learning** *(Terminé)*
    - *Pré-requis :* Validation AI-03, Base de connaissances établie.
    - *Implémentation :* Custom Gym Environment, Policy Improvement (PPO/SB3), Policy Promotion Gate.
-5. **AI-05 : Multi Agent Council**
+5. **AI-05 : Multi Agent Council** *(Terminé)*
    - *Pré-requis :* Validation AI-04, Modèles de RL fonctionnels.
    - *Implémentation :* Prompting, Voting system, Risk Veto basé sur la Knowledge Base.
 6. **AI-06 : Performance Validation**

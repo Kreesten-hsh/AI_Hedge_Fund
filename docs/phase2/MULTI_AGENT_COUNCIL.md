@@ -1,23 +1,29 @@
-# Spécification du Multi-Agent Council
+# Spécification du Multi-Agent Council (Déterministe)
 
-L'IA n'est pas monolithique. C'est un comité de fonctions spécialisées débattant avant validation.
+Le Conseil est un comité de 8 agents fonctionnels isolés, responsables d'une dimension spécifique du marché. Ils ne tradent pas ; ils **votent** (`BUY`, `SELL`, `WAIT`) avec un degré de `Confidence`.
 
-## 1. Les Rôles
-1. **L'Initiateur (Quant Agent)** : Détecte un motif mathématique de rupture. Propose l'ordre d'achat/vente.
-2. **Le Conseiller Historique (Memory Agent)** : Reçoit la proposition, la confronte aux FAISS `Success Memory` et `Failure Memory`. 
-3. **L'Analyste Macro (Context Agent)** : Évalue les conditions de liquidité globales et la volatilité.
-4. **Le Risk Manager (Déterministe)** : Le juge final. Ne consulte pas d'IA. Il évalue la taille de position, l'exposition et le drawdown actuel du portefeuille.
+## 1. Les Rôles (8 Agents)
 
-## 2. Protocole de Vote
-- Le **Quant Agent** émet un ticket de trade `T`.
-- Le **Memory Agent** retourne un score de similarité `[ -100 ; +100 ]` basé sur les 200 expériences passées. 
-- Si Score < 0, le trade est annulé silencieusement (Machine Learning par exclusion).
-- Si Score >= 0, l'**Analyste Macro** valide le spread/liquidité.
+1. **Trend Agent** : Analyse de la structure du marché à moyen terme (EMA/SMA).
+2. **Momentum Agent** : Évaluation de la force immédiate du mouvement (RSI/MACD).
+3. **Volatility Agent** : Détection des régimes d'expansion ou de contraction (ATR/Bollinger).
+4. **Liquidity Agent** : Validation de la capacité à exécuter un ordre sans slippage (Volume/Spread).
+5. **Pattern Agent** : Utilise la mémoire FAISS (`Success Memory`, `Failure Memory`).
+6. **Portfolio Agent** : Diversification, exposition, et corrélation inter-actifs.
+7. **Execution Agent** : Microstructure du routage d'ordre (Latence, API Status).
+8. **News Agent** : Filtre macro-économique (LLM Asynchrone, actuellement Stubbé).
 
-## 3. Le Droit de Veto
-Le **Risk Manager** possède le droit de VETO absolu. Même si le score mémoriel est de +100, si la taille du trade expose le compte au-delà de 2% de risque ruine, l'ordre est rejeté.
+## 2. Protocole de Vote (Orchestrator & Aggregator)
+- Chaque agent évalue le `MarketContext` et émet un `AgentVote` (Action + Confiance).
+- Le **VoteAggregator** rassemble les votes en appliquant les poids générés par le **Reinforcement Learning** (`PolicyDecision.agent_weights`).
+- Si aucun poids n'est défini (avant l'entraînement), les poids sont strictement **égaux (1/8 chacun)**.
 
-## 4. Gestion des Désaccords
-Si le Memory Agent trouve 50 succès similaires et 50 échecs similaires (incertitude maximale), le système adopte un comportement de **réduction de risque** :
-- Soit le trade est abandonné.
-- Soit sa taille (lot) est divisée par 4.
+## 3. Gestion des Désaccords (Conflict Resolver)
+- Le **ConflictResolver** mesure le ratio entre le score de la minorité et de la majorité.
+- Si le désaccord est supérieur à `0.80` (Incertitude forte), la taille de position est **divisée par 4**.
+- Si le désaccord est supérieur à `0.95` (Incertitude critique), le trade est **abandonné** (VETO de conflit).
+
+## 4. Intégration RL & Risk Manager
+- La décision finale est sujette au seuil de confiance ajusté par le module de Reinforcement Learning (RL).
+- Si le trade est validé par le conseil, un `OrderEvent` est généré.
+- **Droit de Veto Absolu** : Le `GlobalRiskManager` du Portfolio Engine a le dernier mot (Drawdown max, exposition brute, concentration). Même si le conseil valide à 100%, le Risk Manager peut bloquer l'ordre.

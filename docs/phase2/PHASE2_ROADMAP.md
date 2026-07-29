@@ -14,7 +14,7 @@ Le développement de la Phase 2 est séquencé en 7 missions strictement interd�
 ## [x] AI-04 : Reinforcement Learning
 **Objectif :** Intégrer FinRL/SB3 pour l'optimisation asynchrone (offline) des poids de décision du Conseil et de la taille de position, en s'appuyant sur la base de connaissances. N'intervient pas dans le chemin critique temps réel.
 
-## AI-05 : Multi Agent Council
+## [x] AI-05 : Multi Agent Council
 **Objectif :** Implémenter le comité de prise de décision (Trend, Momentum, Volatility, etc.) en utilisant le Reinforcement Learning et les règles validées par le Reasoning Engine.
 
 ---

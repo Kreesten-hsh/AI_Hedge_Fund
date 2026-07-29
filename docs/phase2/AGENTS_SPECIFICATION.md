@@ -1,5 +1,7 @@
 # Spécifications des Agents du Comité (Multi-Agent Council)
 
+> **Statut :** Entièrement implémenté (Sprint AI-05). Le code se trouve dans `src/aegis_trade/application/council/agents/`.
+
 Chaque agent est une fonction spécialisée, déterministe ou prédictive, isolée et responsable d'une dimension spécifique du marché. Ils ne tradent pas ; ils **votent** (`BUY`, `SELL`, `WAIT`) avec un degré de `Confidence`.
 
 ## 1. Trend Agent

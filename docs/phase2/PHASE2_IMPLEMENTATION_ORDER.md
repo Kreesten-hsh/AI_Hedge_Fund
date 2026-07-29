@@ -7,7 +7,7 @@
 ## Ordre de Marche Strict
 
 1. **DOC-01 à DOC-04** : Rédaction, Audit, Architecture, Validation. *(Terminé)*
-2. **AI-01 : Memory Engine**
+2. **AI-01 : Memory Engine** *(Terminé)*
    - *Pré-requis :* Validation de `EXPERIENCE_MEMORY_SPEC.md`
    - *Implémentation :* FAISS, Base Vectorielle.
 3. **AI-02 : Reflection Engine**

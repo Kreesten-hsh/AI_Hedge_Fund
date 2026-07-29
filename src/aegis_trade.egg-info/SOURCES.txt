@@ -19,6 +19,7 @@ src/aegis_trade/agents/runner.py
 src/aegis_trade/agents/synthesizer.py
 src/aegis_trade/api/deps.py
 src/aegis_trade/api/main.py
+src/aegis_trade/api/routers/observability.py
 src/aegis_trade/api/routers/orders.py
 src/aegis_trade/api/routers/portfolio.py
 src/aegis_trade/api/routers/positions.py
@@ -26,8 +27,10 @@ src/aegis_trade/api/routers/risk.py
 src/aegis_trade/api/routers/system.py
 src/aegis_trade/api/ws/manager.py
 src/aegis_trade/application/dashboard/services.py
+src/aegis_trade/application/memory/manager.py
 src/aegis_trade/application/monitoring/engine.py
 src/aegis_trade/application/monitoring/models.py
+src/aegis_trade/application/monitoring/logging/json_logger.py
 src/aegis_trade/application/paper_trading/__init__.py
 src/aegis_trade/application/paper_trading/interfaces.py
 src/aegis_trade/application/paper_trading/orchestrator.py
@@ -71,6 +74,7 @@ src/aegis_trade/domain/data_context.py
 src/aegis_trade/domain/decisions.py
 src/aegis_trade/domain/execution.py
 src/aegis_trade/domain/features.py
+src/aegis_trade/domain/memory.py
 src/aegis_trade/domain/reports.py
 src/aegis_trade/domain/research.py
 src/aegis_trade/domain/signal.py
@@ -85,6 +89,7 @@ src/aegis_trade/domain/ports/broker.py
 src/aegis_trade/domain/ports/data_feed.py
 src/aegis_trade/domain/ports/data_provider.py
 src/aegis_trade/domain/ports/features.py
+src/aegis_trade/domain/ports/memory.py
 src/aegis_trade/domain/ports/position_sizer.py
 src/aegis_trade/domain/ports/research_engine.py
 src/aegis_trade/engine/__init__.py
@@ -130,6 +135,8 @@ src/aegis_trade/infrastructure/llm/adapters/__init__.py
 src/aegis_trade/infrastructure/llm/adapters/base.py
 src/aegis_trade/infrastructure/llm/adapters/mock_adapter.py
 src/aegis_trade/infrastructure/llm/adapters/ollama_adapter.py
+src/aegis_trade/infrastructure/memory/basic_embedding.py
+src/aegis_trade/infrastructure/memory/faiss_store.py
 src/aegis_trade/infrastructure/paper/__init__.py
 src/aegis_trade/infrastructure/paper/broker.py
 src/aegis_trade/infrastructure/paper/feed.py

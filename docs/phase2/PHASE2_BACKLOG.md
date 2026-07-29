@@ -1,8 +1,8 @@
 # Phase 2 : Backlog Technique
 
 ## Priorité 0 (Bloquant)
-- **[AI-01-A]** Choix et implémentation de la librairie d'Embedding (ex: SentenceTransformers / OpenAI Embeddings).
-- **[AI-01-B]** Intégration de FAISS dans la couche Infrastructure et création des Adapters.
+- ~~**[AI-01-A]** Choix et implémentation de la librairie d'Embedding (ex: SentenceTransformers / OpenAI Embeddings).~~ *(Fait - BasicDeterministicEmbedding)*
+- ~~**[AI-01-B]** Intégration de FAISS dans la couche Infrastructure et création des Adapters.~~ *(Fait - FaissVectorStore)*
 - **[AI-02-A]** Câblage du module "Feature Extraction" à l'EventBus (écoute des MarketBars et OrderEvents).
 - **[AI-02-B]** Implémentation du routeur Post-Trade (Redirection Gain vers SuccessMemory, Perte vers FailureMemory).
 

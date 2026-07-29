@@ -2,7 +2,7 @@
 
 Le développement de la Phase 2 est séquencé en 7 missions strictement interdépendantes, aboutissant sur un pipeline de validation de niveau institutionnel.
 
-## AI-01 : Memory Engine
+## [x] AI-01 : Memory Engine
 **Objectif :** Poser les fondations de l'Experience Memory (FAISS, Embeddings).
 
 ## AI-02 : Reflection Engine

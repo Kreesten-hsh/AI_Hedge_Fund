@@ -5,7 +5,7 @@
 | vn.py | 100% | Broker Execution | LIVE-02 (Terminé) | `gateway.mt5`, `event_engine` |
 | OpenBB | 30% | Macro Data | AI-04 | `openbb-core` |
 | Qlib | 10% | Feature Extr. | AI-02 | `dataset`, `features` |
-| FinRL | 0% | Reinforcement | AI-03 | DRL algorithms (SB3 wrappers) |
+| FinRL | 100% | Reinforcement | AI-04 | DRL algorithms (SB3 wrappers) |
 | Kronos | 0% | Forecasting | AI-02 | Time-Series Inference (PyTorch) |
 | FinGPT | 0% | Raisonnement | AI-02 | LLM Prompting & Analysis |
 | TradingAgents | 15% | Architecture | AI-04 | Multi-Agent Coordination Design |

@@ -7,10 +7,11 @@
 - **[AI-02-B]** Implémentation du routeur Post-Trade (Redirection Gain vers SuccessMemory, Perte vers FailureMemory).
 
 ## Priorité 1 (Critique)
-- **[AI-03-A]** Conception de l'abstraction `IClusterEngine` (DBSCAN/HDBSCAN) et clustering des expériences de FAISS.
-- **[AI-03-B]** Implémentation du LLM Adapter Local (`OllamaReasoner`) et du `KnowledgeValidator` avec la création des objets `Knowledge` et `KnowledgeScore`.
-- **[AI-04-A]** Conception mathématique de la *Reward Function* intégrant les 8 paramètres définis.
-- **[AI-04-B]** Adapter FinRL à l'environnement Event-Driven d'Aegis (Custom Gym Environment).
+- ~~**[AI-03-A]** Conception de l'abstraction `IClusterEngine` (DBSCAN/HDBSCAN) et clustering des expériences de FAISS.~~ *(Fait)*
+- ~~**[AI-03-B]** Implémentation du LLM Adapter Local (`OllamaReasoner`) et du `KnowledgeValidator` avec la création des objets `Knowledge` et `KnowledgeScore`.~~ *(Fait)*
+- ~~**[AI-04-A]** Conception mathématique de la *Reward Function* intégrant les 8 paramètres définis.~~ *(Fait - RewardCalculator)*
+- ~~**[AI-04-B]** Adapter FinRL/SB3 à l'environnement Event-Driven d'Aegis (Custom Gym Environment).~~ *(Fait - CustomAegisEnv, Asynchronous PolicyTrainer)*
+- ~~**[AI-04-C]** Implémentation du Policy Promotion Gate (Validation stricte avant promotion d'un nouveau modèle).~~ *(Fait - PolicyEvaluator)*
 - **[AI-05-A]** Définition des prompts et rôles du Comité Multi-Agents.
 - **[AI-05-B]** Implémentation du Droit de Veto du Risk Engine au niveau du Domain basé sur la Knowledge Base.
 

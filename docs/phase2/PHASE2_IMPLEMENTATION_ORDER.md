@@ -10,12 +10,12 @@
 2. **AI-01 : Memory Engine** *(Terminé)*
    - *Pré-requis :* Validation de `EXPERIENCE_MEMORY_SPEC.md`
    - *Implémentation :* FAISS, Base Vectorielle.
-3. **AI-03 : Reasoning Engine**
+3. **AI-03 : Reasoning Engine** *(Terminé)*
    - *Pré-requis :* Validation AI-02, `REASONING_ENGINE_SPEC.md`, `KNOWLEDGE_SYSTEM.md`.
    - *Implémentation :* Quality Analyzer, Cluster Engine (DBSCAN), LLM Adapter (Ollama), Knowledge Validator.
-4. **AI-04 : Reinforcement Learning**
+4. **AI-04 : Reinforcement Learning** *(Terminé)*
    - *Pré-requis :* Validation AI-03, Base de connaissances établie.
-   - *Implémentation :* Custom Gym Environment, Policy Improvement.
+   - *Implémentation :* Custom Gym Environment, Policy Improvement (PPO/SB3), Policy Promotion Gate.
 5. **AI-05 : Multi Agent Council**
    - *Pré-requis :* Validation AI-04, Modèles de RL fonctionnels.
    - *Implémentation :* Prompting, Voting system, Risk Veto basé sur la Knowledge Base.

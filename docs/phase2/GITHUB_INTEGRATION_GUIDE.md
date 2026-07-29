@@ -72,15 +72,15 @@ Ce document détaille l'audit technique de chaque dépôt (actif et inspirationn
 - **Pourquoi l'utiliser ?** Implémente correctement PPO, SAC, DDPG pour des environnements Gym financiers.
 - **Pourquoi ne pas le réécrire nous-mêmes ?** Écrire PPO de zéro est suicidaire (trop d'instabilité de convergence mathématique).
 - **Modules utilisés :** Wrappers SB3 (Stable-Baselines3).
-- **Classes :** `DRLAgent`.
-- **Fonctions :** `train()`, `predict()`.
+- **Classes :** `PPO` via `sb3_policy_adapter.py`.
+- **Fonctions :** `train_policy()`, `predict()`.
 - **Architecture :** Actor-Critic (RL).
-- **Ce que nous gardons :** L'agent SB3 et le processus d'entraînement.
-- **Ce que nous supprimons :** Les environnements Gym par défaut (actions Yahoo Finance), la fonction de récompense standard (PnL pur).
-- **Temps estimé :** 4 Semaines.
+- **Ce que nous gardons :** Uniquement la dépendance `stable-baselines3>=2.0.0`, `gymnasium>=0.29.0`, et l'algorithme PPO (CPU only).
+- **Ce que nous supprimons :** Les environnements Gym par défaut de FinRL (actions Yahoo Finance), la fonction de récompense standard (PnL pur). L'installation globale de FinRL est évitée si possible pour limiter le bloat.
+- **Temps estimé :** 4 Semaines (Fait - AI-04).
 - **RAM :** 4 GB.
 - **CPU :** Très élevé.
-- **GPU :** Oui (2 GB VRAM minimum).
+- **GPU :** Non (Machine cible CPU-only). PPO optimisé pour tourner sur CPU.
 - **Risques :** Overfitting, Reward Hacking (l'IA triche au lieu d'apprendre).
 - **Alternatives :** Ray RLlib (Plus puissant mais beaucoup trop complexe à configurer).
 - **Tests :** Validation de convergence (Loss decrease), Backtest sur Holdout set.

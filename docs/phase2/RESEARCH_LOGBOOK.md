@@ -32,3 +32,7 @@ Pourquoi: (Commentaire auto-généré par le LLM post-trade)
 ## Logs d'Expériences (En attente d'AI-05)
 
 *Les logs seront injectés ici automatiquement par le script d'audit post-trade.*
+
+## Logs de Validation de Politique (Policy Promotion Gate)
+Trace des validations de politiques RL (AI-04).
+- *[DATE] Policy [ID] évaluée vs [ID_ACTUELLE]. Statut : PROMOTED / REJECTED.*

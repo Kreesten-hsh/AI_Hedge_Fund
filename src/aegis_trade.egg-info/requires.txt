@@ -9,6 +9,7 @@ PyYAML>=6.0
 tenacity>=8.2
 prometheus-client>=0.20.0
 faiss-cpu>=1.14.3
+ta
 pytest-cov>=7.1.0
 
 [dev]

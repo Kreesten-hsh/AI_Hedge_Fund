@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
 
-from aegis_trade.domain import MarketBar, Symbol
+from aegis_trade.domain import MarketBar, Symbol, ExitReason
 
 class EngineEventType(str, Enum):
     MARKET = "market"
@@ -149,8 +149,9 @@ class AccountEvent(EngineEvent):
 class TradeEvent(EngineEvent):
     trade_id: str
     symbol: Symbol
-    action: str # closed
+    action: str # opened, updated, closed
     realized_pnl: Decimal
+    exit_reason: ExitReason | None = None
     
     def __post_init__(self) -> None:
         object.__setattr__(self, 'event_type', EngineEventType.TRADE)

@@ -4,8 +4,15 @@ Ce document détaille l'audit technique de chaque dépôt (actif et inspirationn
 
 ---
 
-## 1. vn.py (Niveau S - Core Execution)
-- **Pourquoi l'utiliser ?** Moteur HFT en C++/Python éprouvé par les institutions chinoises. Gestion parfaite des flux asynchrones et connectivité MT5/FIX.
+### `vnpy`
+**Rôle :** Broker Adapter et Gateway.
+**Justification :** Framework HFT industriel en C++/Python, évite de réécrire la connectivité bas niveau FIX ou REST avec les brokers. Couche d'exécution pure.
+
+### `ta`
+**Rôle :** Calcul des indicateurs techniques (RSI, MACD, ATR, EMA, VWAP).
+**Justification :** Requis par `FEATURE_ENGINEERING.md`. Fournit des calculs d'indicateurs vectorisés ultra-rapides sans réinventer la roue, crucial pour maintenir la latence < 20 ms lors de la génération des Market Snapshots en direct.
+
+## 4. Workflows GitHub Actionses et connectivité MT5/FIX.
 - **Pourquoi ne pas le réécrire nous-mêmes ?** Refaire un connecteur MT5 asynchrone robuste en C++ prendrait 6 mois de R&D avec des risques de perte de paquets, ce qui est mortel en HFT.
 - **Modules utilisés :** `vnpy.event`, `vnpy.gateway.mt5`, `vnpy.trader.object`.
 - **Classes :** `EventEngine`, `Mt5Gateway`, `OrderRequest`, `TickData`.

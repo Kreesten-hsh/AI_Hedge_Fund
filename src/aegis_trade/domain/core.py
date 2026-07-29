@@ -135,11 +135,19 @@ class Position:
         if self.volume <= 0:
             raise ValueError("Position volume must be strictly positive.")
 
+class ExitReason(str, Enum):
+    TAKE_PROFIT = "take_profit"
+    STOP_LOSS = "stop_loss"
+    MANUAL_CLOSE = "manual_close"
+    LIQUIDATION = "liquidation"
+    RISK_EXIT = "risk_exit"
+
 @dataclass(frozen=True, slots=True)
 class Trade:
     position: Position
     exit_price: Decimal
     closed_at: datetime
+    exit_reason: ExitReason = ExitReason.MANUAL_CLOSE
 
     def __post_init__(self) -> None:
         if self.closed_at.tzinfo != timezone.utc:

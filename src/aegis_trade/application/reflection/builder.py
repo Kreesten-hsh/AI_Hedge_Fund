@@ -16,15 +16,26 @@ class ExperienceBuilder:
     def __init__(self, embedding_generator: IEmbeddingGenerator):
         self._embedding_generator = embedding_generator
 
-    def _determine_category(self, pnl: Decimal, max_drawdown: Decimal, metadata: Mapping[str, str]) -> MemoryCategory:
+    def _determine_category(self, pnl: Decimal, max_drawdown: Decimal, features: MarketFeatures, metadata: Mapping[str, str]) -> MemoryCategory:
         """
-        Determines the memory category based on performance metrics and metadata overrides.
+        Determines the memory category based on performance metrics, features, and metadata overrides.
         """
         if metadata and "force_category" in metadata:
             try:
                 return MemoryCategory(metadata["force_category"])
             except ValueError:
                 pass
+
+        if metadata and "exit_reason" in metadata:
+            reason = metadata["exit_reason"]
+            if reason == "liquidation":
+                return MemoryCategory.FAILURE
+            elif reason == "risk_exit":
+                return MemoryCategory.EXCEPTIONAL
+
+        # Exceptional via volatility
+        if features.volatility_state > 0.05: # Threshold example
+            return MemoryCategory.EXCEPTIONAL
 
         pnl_float = float(pnl)
         drawdown_float = float(max_drawdown)
@@ -57,7 +68,7 @@ class ExperienceBuilder:
         meta = metadata or {}
         exp_id = str(uuid.uuid4())
         
-        category = self._determine_category(pnl, max_drawdown, meta)
+        category = self._determine_category(pnl, max_drawdown, features, meta)
         embedding = self._embedding_generator.generate(features)
         
         return Experience(

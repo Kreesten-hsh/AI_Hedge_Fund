@@ -31,7 +31,8 @@ def test_market_snapshot_builder(snapshot_builder):
     
     snapshot = snapshot_builder.get_snapshot(symbol)
     assert snapshot is not None
-    assert snapshot.close == Decimal("105")
+    assert snapshot.latest_bar.close == Decimal("105")
+    assert len(snapshot.history) == 1
     
     # Verify immutability of the retrieved snapshot
     bar2 = MarketBar(
@@ -48,11 +49,13 @@ def test_market_snapshot_builder(snapshot_builder):
     snapshot_builder.on_market_event(event2)
     
     # Original snapshot should not have changed
-    assert snapshot.close == Decimal("105")
+    assert snapshot.latest_bar.close == Decimal("105")
+    assert len(snapshot.history) == 1
     
     # New snapshot should have the latest data
     snapshot2 = snapshot_builder.get_snapshot(symbol)
-    assert snapshot2.close == Decimal("112")
+    assert snapshot2.latest_bar.close == Decimal("112")
+    assert len(snapshot2.history) == 2
     
 def test_market_snapshot_empty(snapshot_builder):
     symbol = Symbol("EURUSD", AssetClass.FOREX)

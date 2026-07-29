@@ -34,6 +34,12 @@ src/aegis_trade/application/monitoring/logging/json_logger.py
 src/aegis_trade/application/paper_trading/__init__.py
 src/aegis_trade/application/paper_trading/interfaces.py
 src/aegis_trade/application/paper_trading/orchestrator.py
+src/aegis_trade/application/reflection/__init__.py
+src/aegis_trade/application/reflection/builder.py
+src/aegis_trade/application/reflection/extractor.py
+src/aegis_trade/application/reflection/observer.py
+src/aegis_trade/application/reflection/pipeline.py
+src/aegis_trade/application/reflection/snapshot.py
 src/aegis_trade/application/research/comparison.py
 src/aegis_trade/application/research/experiment_manager.py
 src/aegis_trade/application/research/experiment_runner.py

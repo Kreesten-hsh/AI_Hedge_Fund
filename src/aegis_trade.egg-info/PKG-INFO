@@ -14,6 +14,7 @@ Requires-Dist: PyYAML>=6.0
 Requires-Dist: tenacity>=8.2
 Requires-Dist: prometheus-client>=0.20.0
 Requires-Dist: faiss-cpu>=1.14.3
+Requires-Dist: ta
 Requires-Dist: pytest-cov>=7.1.0
 Provides-Extra: dev
 Requires-Dist: pytest; extra == "dev"

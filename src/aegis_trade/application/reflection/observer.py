@@ -1,14 +1,15 @@
 from typing import Dict, Optional
 from datetime import datetime
 
-from aegis_trade.domain.core import Symbol, MarketBar
+from aegis_trade.domain.core import Symbol
 from aegis_trade.engine.events import PositionEvent, TradeEvent
+from aegis_trade.application.reflection.snapshot import RichMarketSnapshot
 
 class TradeObservation:
     """
     Holds data about a trade currently in progress.
     """
-    def __init__(self, symbol: Symbol, entry_snapshot: MarketBar, opened_at: datetime):
+    def __init__(self, symbol: Symbol, entry_snapshot: RichMarketSnapshot, opened_at: datetime):
         self.symbol = symbol
         self.entry_snapshot = entry_snapshot
         self.opened_at = opened_at
@@ -25,7 +26,7 @@ class TradeObserver:
         # Maps symbol string to active observation
         self._active_trades: Dict[str, TradeObservation] = {}
 
-    def on_position_opened(self, event: PositionEvent, snapshot: MarketBar) -> None:
+    def on_position_opened(self, event: PositionEvent, snapshot: RichMarketSnapshot) -> None:
         """
         Records the start of a trade along with the market snapshot at entry.
         """

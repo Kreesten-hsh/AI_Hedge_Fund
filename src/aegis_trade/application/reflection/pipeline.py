@@ -1,6 +1,5 @@
 import logging
 from decimal import Decimal
-from typing import Optional
 
 from aegis_trade.core.events.interfaces import EventBus, EventHandler
 from aegis_trade.domain.core import Side, TimeFrame
@@ -87,6 +86,10 @@ class ReflectionPipeline(EventHandler):
                 duration = int((event.timestamp - observation.opened_at).total_seconds())
                 max_drawdown = Decimal(str(observation.max_drawdown_tracked))
                 
+                metadata = {"trade_id": event.trade_id}
+                if event.exit_reason:
+                    metadata["exit_reason"] = event.exit_reason.value
+                
                 # 3. Build Experience (Assuming default Side and TimeFrame for now, as TradeEvent lacks them)
                 # In a real scenario, Side and TimeFrame should come from TradeObservation
                 experience = self._builder.build(
@@ -98,7 +101,7 @@ class ReflectionPipeline(EventHandler):
                     pnl=event.realized_pnl,
                     max_drawdown=max_drawdown,
                     duration_seconds=duration,
-                    metadata={"trade_id": event.trade_id}
+                    metadata=metadata
                 )
                 
                 # 4. Save to MemoryManager

@@ -19,6 +19,7 @@ dependencies = [
     "tenacity>=8.2",
     "prometheus-client>=0.20.0",
     "faiss-cpu>=1.14.3",
+    "ta",
     "pytest-cov>=7.1.0",
 ]
 
@@ -44,3 +45,9 @@ show_error_codes = true
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
+
+[dependency-groups]
+dev = [
+    "mypy>=2.3.0",
+    "pyright>=1.1.411",
+]

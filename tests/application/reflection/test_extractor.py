@@ -1,12 +1,21 @@
 from datetime import datetime, timezone
 from decimal import Decimal
-import pytest
 
 from aegis_trade.domain.core import Symbol, AssetClass, MarketBar, TimeFrame
 from aegis_trade.domain.memory import MarketSession
 from aegis_trade.application.reflection.extractor import LiveFeatureExtractor
+from aegis_trade.application.reflection.snapshot import RichMarketSnapshot
+import pandas as pd
 
-def test_live_feature_extractor():
+def create_snapshot(bar: MarketBar) -> RichMarketSnapshot:
+    df = pd.DataFrame([{
+        'timestamp': bar.timestamp, 'open': float(bar.open), 'high': float(bar.high),
+        'low': float(bar.low), 'close': float(bar.close), 'volume': float(bar.volume)
+    }])
+    return RichMarketSnapshot(symbol=bar.symbol, timestamp=bar.timestamp, latest_bar=bar, history=df)
+
+
+def test_live_feature_extractor() -> None:
     extractor = LiveFeatureExtractor()
     
     symbol = Symbol("AAPL", AssetClass.EQUITIES)
@@ -24,7 +33,7 @@ def test_live_feature_extractor():
         volume=Decimal("1000000")
     )
     
-    features = extractor.extract(bar)
+    features = extractor.extract(create_snapshot(bar))
     
     assert features.price == 152.0
     assert features.open_price == 150.0
@@ -38,10 +47,9 @@ def test_live_feature_extractor():
     assert features.time_of_day == 870
     assert features.session == MarketSession.LONDON
     
-    # Check volatility logic (mocked logic: (high-low)*0.5)
-    assert features.atr == (155.0 - 149.0) * 0.5
+    assert features.atr == (155.0 - 149.0)
     
-def test_live_feature_extractor_sessions():
+def test_live_feature_extractor_sessions() -> None:
     extractor = LiveFeatureExtractor()
     symbol = Symbol("AAPL", AssetClass.EQUITIES)
     
@@ -50,18 +58,18 @@ def test_live_feature_extractor_sessions():
         timestamp=datetime(2023, 1, 1, 4, 30, tzinfo=timezone.utc),
         open=Decimal("150"), high=Decimal("151"), low=Decimal("149"), close=Decimal("150"), volume=Decimal("100")
     )
-    assert extractor.extract(bar_tokyo).session == MarketSession.TOKYO
+    assert extractor.extract(create_snapshot(bar_tokyo)).session == MarketSession.TOKYO
     
     bar_ny = MarketBar(
         symbol=symbol, timeframe=TimeFrame.M1,
         timestamp=datetime(2023, 1, 1, 16, 30, tzinfo=timezone.utc),
         open=Decimal("150"), high=Decimal("151"), low=Decimal("149"), close=Decimal("150"), volume=Decimal("100")
     )
-    assert extractor.extract(bar_ny).session == MarketSession.NEW_YORK
+    assert extractor.extract(create_snapshot(bar_ny)).session == MarketSession.NEW_YORK
     
     bar_asian = MarketBar(
         symbol=symbol, timeframe=TimeFrame.M1,
         timestamp=datetime(2023, 1, 1, 23, 30, tzinfo=timezone.utc),
         open=Decimal("150"), high=Decimal("151"), low=Decimal("149"), close=Decimal("150"), volume=Decimal("100")
     )
-    assert extractor.extract(bar_asian).session == MarketSession.ASIAN_BOX
+    assert extractor.extract(create_snapshot(bar_asian)).session == MarketSession.ASIAN_BOX

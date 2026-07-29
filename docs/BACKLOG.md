@@ -29,24 +29,24 @@ L'ordre d'implémentation est strictement linéaire (Pipeline Quantitatif).
 ### VA-01 : Institutional Validation Framework
 - **Objectif** : Construire un laboratoire de validation (Walk-Forward, Hold-Out, Monte Carlo, Benchmark) pour tester la robustesse économique des stratégies avant le ML.
 - **Priorité** : Critique
-- **Statut** : PLANNED
+- **Statut** : COMPLETED
 
 ### QL-01 : Qlib Adapter
 - **Objectif** : Intégrer Microsoft Qlib pour un backtesting factoriel à ultra-haute vitesse.
 - **Priorité** : Moyenne
-- **Statut** : PLANNED
+- **Statut** : COMPLETED
 
 ### ML-01 : Machine Learning / AI Decision Engine
 - **Objectif** : Ajouter les modèles ML (LightGBM, Pytorch) et réintégrer l'AI Council (LLM) dans le pipeline de stratégie.
 - **Priorité** : Moyenne
-- **Statut** : PLANNED
+- **Statut** : COMPLETED
 
 ## Phase 3 : Production & Temps Réel
 
 ### EX-01 : Execution Engine (Event-Driven)
 - **Objectif** : Moteur événementiel (EventBus) complet pour router les ordres (via broker, e.g. vn.py/ccxt) en conditions réelles ou Paper Trading.
 - **Priorité** : Haute
-- **Statut** : PLANNED
+- **Statut** : COMPLETED
 
 ### LIVE-01 / LIVE-02 : Production / Dashboards
 - **Objectif** : Lancement en direct, Dashboards de supervision (FastAPI/React), et automatisation complète.

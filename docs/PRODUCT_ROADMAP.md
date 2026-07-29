@@ -3,7 +3,7 @@
 La feuille de route définit les jalons de développement d'Aegis Quant OS. 
 Suite à l'audit de maturité produit, la roadmap a été restructurée pour se concentrer sur la création d'un système de trading quantitatif personnel exploitable (Hedge Fund personnel), en écartant toute logique SaaS ou commerciale.
 
-## Sprint 1 : Validation Framework (Mission VA-01)
+## Sprint 1 : Validation Framework (Mission VA-01) [TERMINÉ]
 ### Objectif
 Construire un laboratoire de validation quantitatif (Walk-Forward, Hold-Out, Monte Carlo, Benchmark) pour tester automatiquement la robustesse d'une stratégie avant toute intégration ML.
 ### Contraintes
@@ -11,7 +11,7 @@ Construire un laboratoire de validation quantitatif (Walk-Forward, Hold-Out, Mon
 ### Critères de réussite
 - Production d'un rapport de validation JSON générant un "Strategy Score".
 
-## Sprint 2 : Intégration Qlib (Mission QL-01)
+## Sprint 2 : Intégration Qlib (Mission QL-01) [TERMINÉ]
 ### Objectif
 Brancher Microsoft Qlib comme moteur d'accélération pour la recherche de signaux et les backtests vectorisés.
 ### Contraintes
@@ -20,7 +20,7 @@ Brancher Microsoft Qlib comme moteur d'accélération pour la recherche de signa
 ### Critères de réussite
 - Les modèles ML de Qlib peuvent être entraînés sur les features générées par Aegis.
 
-## Sprint 3 : Moteur d'Exécution (Mission EX-01 - Paper Trading)
+## Sprint 3 : Moteur d'Exécution (Mission EX-01 - Paper Trading) [TERMINÉ]
 ### Objectif
 Remplacer le broker simulé par une connexion à un environnement de Paper Trading réel via vn.py ou MetaTrader 5 (MT5).
 ### Contraintes
@@ -28,7 +28,7 @@ Remplacer le broker simulé par une connexion à un environnement de Paper Tradi
 ### Critères de réussite
 - Les ordres générés en local sont exécutés et réconciliés sur un compte de démonstration MT5/vn.py.
 
-## Sprint 4 : Le Centre de Contrôle (Mission LIVE-01 - Dashboard)
+## Sprint 4 : Le Centre de Contrôle (Mission LIVE-01 - Dashboard) [EN COURS]
 ### Objectif
 Construire l'interface visuelle locale (Dashboard) pour superviser le système sans utiliser le terminal.
 ### Contraintes

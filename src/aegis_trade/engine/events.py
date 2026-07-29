@@ -15,6 +15,10 @@ class EngineEventType(str, Enum):
     PORTFOLIO = "portfolio"
     METRICS = "metrics"
     AUDIT = "audit"
+    ORDER_LIFECYCLE = "order_lifecycle"
+    POSITION = "position"
+    ACCOUNT = "account"
+    TRADE = "trade"
 
 class SignalIntent(str, Enum):
     ENTER_LONG = "enter_long"
@@ -104,5 +108,50 @@ class AuditEvent(EngineEvent):
     
     def __post_init__(self) -> None:
         object.__setattr__(self, 'event_type', EngineEventType.AUDIT)
+        super().__post_init__()
+
+# --- Extended Lifecycle Events (e.g. for Paper/Live Trading) ---
+
+@dataclass(frozen=True)
+class OrderLifecycleEvent(EngineEvent):
+    order_id: str
+    status: str # submitted, accepted, filled, cancelled, rejected, expired
+    message: str = ""
+    
+    def __post_init__(self) -> None:
+        object.__setattr__(self, 'event_type', EngineEventType.ORDER_LIFECYCLE)
+        super().__post_init__()
+
+@dataclass(frozen=True)
+class PositionEvent(EngineEvent):
+    symbol: Symbol
+    action: str # opened, closed, updated
+    volume: Decimal
+    average_price: Decimal
+    
+    def __post_init__(self) -> None:
+        object.__setattr__(self, 'event_type', EngineEventType.POSITION)
+        super().__post_init__()
+
+@dataclass(frozen=True)
+class AccountEvent(EngineEvent):
+    account_id: str
+    action: str # balance_updated, margin_changed
+    currency: str
+    amount: Decimal
+    
+    def __post_init__(self) -> None:
+        object.__setattr__(self, 'event_type', EngineEventType.ACCOUNT)
+        super().__post_init__()
+
+@dataclass(frozen=True)
+class TradeEvent(EngineEvent):
+    trade_id: str
+    symbol: Symbol
+    action: str # closed
+    realized_pnl: Decimal
+    
+    def __post_init__(self) -> None:
+        object.__setattr__(self, 'event_type', EngineEventType.TRADE)
         super().__post_init__()
 

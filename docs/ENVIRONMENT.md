@@ -1,63 +1,108 @@
-# AEGIS QUANT OS — Environment
+# Aegis Quant OS — Institutional Development Environment
 
-Ce document est la référence officielle du projet concernant la configuration, la préparation et la validation de l'environnement de développement et d'exécution.
+Ce document décrit la configuration officielle et certifiée pour développer et exécuter Aegis Quant OS. 
 
-## Politique de Compatibilité
+Conformément à la mission **INFRA-01**, cet environnement est 100% reproductible et basé sur Linux Mint. 
+À partir de ce stade, Linux devient la plateforme unique de développement et de déploiement (VPS, Cloud, Edge).
 
-Afin de garantir la stabilité des dépendances critiques institutionnelles (notamment `OpenBB` et `Qlib`), le projet est strictement verrouillé sur :
-- **Python 3.11** (idéalement 3.11.x)
-- **Système d'exploitation :** Windows 11 (requis par MetaTrader 5)
+---
 
-*Aucune montée de version vers Python 3.12 ou 3.13 n'est autorisée tant que les bibliothèques quantitatives principales n'offrent pas un support officiel complet et validé.*
+## 1. Système et Prérequis
 
-## Procédure Complète d'Installation
+* **Système d'Exploitation** : Linux Mint (ou distribution basée sur Ubuntu/Debian récente).
+* **Interpréteur Officiel** : Python 3.11.x
+* **Gestionnaire d'Environnement** : `uv` (recommandé pour une installation isolée ultra-rapide) ou `apt`.
 
-### 1. Création du Virtual Environment (`.venv`)
+---
 
-Vérifiez d'abord que votre interpréteur par défaut est bien Python 3.11 (`py -3.11 --version`).
-Depuis la racine du projet (dans PowerShell) :
+## 2. Création de l'Environnement
 
-```powershell
-# Supprimer un éventuel ancien environnement
-Remove-Item -Recurse -Force .venv -ErrorAction SilentlyContinue
+Nous recommandons fortement l'utilisation de `uv` pour isoler Python 3.11 proprement, indépendamment des paquets de votre système d'exploitation.
 
-# Créer le nouvel environnement avec Python 3.11
-py -3.11 -m venv .venv
-```
+### Méthode A : Avec `uv` (Recommandée)
 
-### 2. Installation des Dépendances
+1. **Installer uv**
+   ```bash
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   ```
+2. **Créer l'environnement virtuel Python 3.11**
+   Dans le répertoire racine d'Aegis Quant OS :
+   ```bash
+   uv venv -p 3.11 .venv
+   ```
+3. **Activer le venv**
+   ```bash
+   source .venv/bin/activate
+   ```
 
-Activez l'environnement virtuel et installez les dépendances en mode éditable avec les outils de développement :
+### Méthode B : Avec `apt` (Classique)
 
-```powershell
-# Activer l'environnement
-.venv\Scripts\Activate.ps1
+1. **Installer Python 3.11**
+   ```bash
+   sudo apt update
+   sudo apt install -y python3.11 python3.11-venv python3.11-dev
+   ```
+2. **Créer le venv**
+   ```bash
+   python3.11 -m venv .venv
+   source .venv/bin/activate
+   ```
 
-# Mettre à jour pip
-python -m pip install --upgrade pip
+---
 
-# Installer le projet et ses dépendances (avec pytest, pytest-cov, pytest-mock)
-pip install -e .[dev]
-```
+## 3. Installation des Dépendances
 
-### 3. Validation Finale de l'Environnement
+L'ensemble des dépendances quantitatives institutionnelles a été figé.
 
-Avant de lancer le moindre script métier ou la suite de tests, vous devez exécuter le script de vérification :
+1. **S'assurer d'avoir l'environnement actif** :
+   ```bash
+   source .venv/bin/activate
+   ```
+2. **Installer les dépendances figées** :
+   ```bash
+   pip install -r requirements.txt
+   ```
+   *Alternative si vous utilisez uv :*
+   ```bash
+   uv pip install -r requirements.txt
+   ```
 
-```powershell
+*(Les bibliothèques incluent : OpenBB, Microsoft Qlib, vn.py, pandas, numpy, scipy, scikit-learn, lightgbm, xgboost, polars, pyarrow, matplotlib, etc.)*
+
+---
+
+## 4. Vérification et Certification (INFRA-01)
+
+Une fois l'installation terminée, vous devez valider votre environnement grâce au script de certification fourni.
+
+### Étape 4.1 : Exécution du Certificateur
+```bash
 python scripts/verify_environment.py
 ```
+Le script va auditer l'OS, l'architecture, la RAM, le disque, la version de Python, l'activation du `.venv`, ainsi que l'import effectif de toutes les bibliothèques. **L'état final doit être `[PASS]`.**
 
-Si le script affiche un statut final **`READY`**, l'environnement est certifié conforme.
-
-### 4. Exécution des Tests
-
-Une fois l'environnement validé, vous pouvez exécuter la suite de tests de manière isolée pour vérifier les régressions :
-
-```powershell
-pytest tests/providers
-pytest tests/domain
-pytest tests/engine
+### Étape 4.2 : Lancement des Smoke Tests
+Afin de garantir que les briques internes d'Aegis (Moteur de Portefeuille, Gouvernance du Risque) ne sont pas altérées par les dépendances quantitatives :
+```bash
+pytest tests/test_smoke_env.py
 ```
+*(Si certaines bibliothèques très spécifiques comme `qlib` ou `vnpy` remontent des exceptions C++ dues au système, le test le signalera de façon explicite (xfail) sans casser le moteur).*
 
-**Règle d'Or :** Si la validation (`verify_environment.py`) échoue, aucun développement n'est autorisé tant que le problème d'environnement n'a pas été corrigé.
+---
+
+## 5. Résolution des Problèmes Connus (Troubleshooting)
+
+### A. Echec d'import de `pyqlib` ou `vn.py` sur Linux
+Certaines distributions peuvent manquer de bibliothèques C++ requises par ces moteurs. 
+- Vérifiez la présence de `build-essential` et `cmake` :
+  ```bash
+  sudo apt install -y build-essential cmake
+  ```
+- Sous Python 3.11, pyqlib (version < 0.9.x) pouvait poser problème sous Windows mais fonctionne sous Linux via compilation source. Si vous rencontrez une erreur, Aegis Quant OS isole les pannes via son système Anti-Corruption Layer (ACL). Les *smoke tests* reporteront une alerte `[WARNING]` ou `[xfailed]` mais ne bloqueront pas le démarrage global.
+
+### B. OOM (Out of Memory) lors de `pip install`
+Si votre machine ou VPS dispose de moins de 8Go de RAM, l'installation de bibliothèques lourdes comme `xgboost` ou `scipy` peut crasher.
+- Solution : Utilisez `uv pip install` qui gère mieux la mémoire, ou installez via `--no-cache-dir`.
+
+---
+*Ce document sert de référence absolue pour l'intégration de nouveaux collaborateurs ou de nouveaux agents sur le projet Aegis Quant OS.*

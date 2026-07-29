@@ -1,118 +1,114 @@
 import sys
 import platform
-import os
 import importlib
+import psutil
+import shutil
+import os
 
-def check_package(package_name, min_version=None):
-    try:
-        if package_name == 'openbb':
-            try:
-                import openbb_core
-                import openbb
-                version = getattr(openbb, "__version__", "Found")
-            except ImportError:
-                return "FAILED", "Not installed"
-        elif package_name == 'qlib':
-            try:
-                import qlib
-                version = getattr(qlib, "__version__", "Found")
-            except ImportError:
-                # pyqlib often installs as qlib
-                return "FAILED", "Not installed"
-        else:
-            mod = importlib.import_module(package_name)
-            version = getattr(mod, "__version__", "Found")
-        
-        # Simple version check logic if needed
-        if min_version and version != "Found":
-            # Just naive split, could be improved if needed
-            v_parts = version.split('.')
-            m_parts = min_version.split('.')
-            for v, m in zip(v_parts, m_parts):
-                try:
-                    if int(v.split('-')[0].split('+')[0]) < int(m):
-                        return "FAILED", f"{version} < {min_version}"
-                    elif int(v.split('-')[0].split('+')[0]) > int(m):
-                        break
-                except ValueError:
-                    pass
-        
-        return "OK", version
-    except ImportError:
-        return "FAILED", "Not installed"
-    except Exception as e:
-        return "FAILED", str(e)
+class Colors:
+    PASS = '\033[92m'
+    WARN = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
 
-def main():
-    print("===================================================")
-    print("AEGIS QUANT OS")
-    print("Environment Verification")
-    print("===================================================\n")
-    
-    # Python Version
-    py_version = sys.version.split()[0]
-    py_ok = "3.11" in py_version
-    py_status = "OK" if py_ok else "FAIL"
-    print(f"Python ............. {py_version} {py_status}")
-    
-    # Platform
-    print(f"Platform ........... {platform.system()} {platform.release()}")
-    print(f"Architecture ....... {platform.machine()}")
-    
-    # sys.executable
-    executable = sys.executable
-    print(f"Executable ......... {executable}")
-    
-    # VirtualEnv check
-    is_venv = hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix)
-    is_venv_str = "ACTIVE" if is_venv else "INACTIVE"
-    print(f"VirtualEnv ......... {is_venv_str}")
-    
-    print("\n===================================================\n")
-    
-    print(f"{'Component':<15} | {'Minimum':<10} | {'Detected':<15} | {'Status'}")
-    print("-" * 60)
-    
-    components = [
-        ("Python", "3.11", py_version, "OK" if py_ok else "FAILED"),
-    ]
-    
-    packages = [
-        ("OpenBB", "openbb", "4.0"),
-        ("Qlib", "qlib", "0.9"),
-        ("vn.py", "vnpy", ""),
-        ("Pandas", "pandas", ""),
-        ("NumPy", "numpy", ""),
-        ("PyArrow", "pyarrow", ""),
-        ("Pytest", "pytest", ""),
-    ]
-    
-    all_ready = py_ok and is_venv
-    
-    for display_name, pkg_name, min_ver in packages:
-        status, detected = check_package(pkg_name, min_ver)
-        if status != "OK":
-            all_ready = False
-        components.append((display_name, min_ver, detected, status))
-    
-    for comp, min_v, det, stat in components:
-        if comp == "Python":
-            continue
-        print(f"{comp:<15} | {min_v:<10} | {det:<15} | {stat}")
-        
-    print("\n===================================================\n")
-    
-    print("Environment Status")
-    print("")
-    if all_ready:
-        print("READY")
+def report(status, name, message=""):
+    if status == "PASS":
+        print(f"{name:.<30} {Colors.PASS}[PASS]{Colors.ENDC} {message}")
+    elif status == "WARNING":
+        print(f"{name:.<30} {Colors.WARN}[WARNING]{Colors.ENDC} {message}")
     else:
-        print("FAILED")
+        print(f"{name:.<30} {Colors.FAIL}[ERROR]{Colors.ENDC} {message}")
+
+def check_system():
+    print(f"\n{Colors.BOLD}--- SYSTEM CHECK ---{Colors.ENDC}")
+    os_name = platform.system()
+    if os_name == "Linux":
+        report("PASS", "Operating System", f"Linux ({platform.release()})")
+    else:
+        report("WARNING", "Operating System", f"Expected Linux, got {os_name}")
     
-    print("\n===================================================")
+    cpu_arch = platform.machine()
+    report("PASS", "CPU Architecture", cpu_arch)
     
-    if not all_ready:
-        sys.exit(1)
+    # RAM Check
+    mem = psutil.virtual_memory()
+    total_gb = mem.total / (1024**3)
+    if total_gb >= 8:
+        report("PASS", "Total RAM", f"{total_gb:.2f} GB")
+    else:
+        report("WARNING", "Total RAM", f"{total_gb:.2f} GB (>= 8GB recommended)")
+        
+    # Disk Check
+    disk = shutil.disk_usage("/")
+    free_gb = disk.free / (1024**3)
+    if free_gb >= 10:
+        report("PASS", "Free Disk Space", f"{free_gb:.2f} GB")
+    else:
+        report("WARNING", "Free Disk Space", f"{free_gb:.2f} GB (>= 10GB recommended)")
+
+def check_python_env():
+    print(f"\n{Colors.BOLD}--- PYTHON ENVIRONMENT ---{Colors.ENDC}")
+    # Python Version
+    version = sys.version_info
+    if version.major == 3 and version.minor == 11:
+        report("PASS", "Python Version", sys.version.split()[0])
+    else:
+        report("ERROR", "Python Version", f"Expected 3.11.x, got {sys.version.split()[0]}")
+    
+    # Venv Check
+    is_venv = (hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix))
+    if is_venv:
+        report("PASS", "Virtual Environment", "Active")
+    else:
+        report("ERROR", "Virtual Environment", "Not running inside a venv")
+
+def check_dependencies():
+    print(f"\n{Colors.BOLD}--- CRITICAL DEPENDENCIES ---{Colors.ENDC}")
+    deps = [
+        "openbb",
+        "qlib",
+        "vnpy",
+        "pandas",
+        "numpy",
+        "scipy",
+        "polars",
+        "pyarrow",
+        "sklearn", # scikit-learn
+        "lightgbm",
+        "xgboost",
+        "catboost",
+        "matplotlib",
+        "plotly",
+        "pytest",
+        "mypy",
+        "ruff",
+        "black"
+    ]
+    
+    all_pass = True
+    for dep in deps:
+        try:
+            mod = importlib.import_module(dep)
+            version = getattr(mod, "__version__", "unknown")
+            report("PASS", dep, f"v{version}")
+        except ImportError as e:
+            report("ERROR", dep, f"ImportFailed: {e}")
+            all_pass = False
+        except Exception as e:
+            report("WARNING", dep, f"Load Warning: {e}")
+            
+    return all_pass
 
 if __name__ == "__main__":
-    main()
+    check_system()
+    check_python_env()
+    all_deps = check_dependencies()
+    
+    print(f"\n{Colors.BOLD}--- CERTIFICATION RESULT ---{Colors.ENDC}")
+    if all_deps:
+        print(f"{Colors.PASS}Environment is fully certified for Aegis Quant OS.{Colors.ENDC}")
+        sys.exit(0)
+    else:
+        print(f"{Colors.FAIL}Environment certification FAILED. Missing critical dependencies.{Colors.ENDC}")
+        sys.exit(1)

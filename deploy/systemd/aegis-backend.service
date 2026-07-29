@@ -1,0 +1,15 @@
+[Unit]
+Description=Aegis Quant OS - Backend API
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/opt/aegis
+Environment="PATH=/opt/aegis/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONUNBUFFERED=1"
+ExecStart=/opt/aegis/.venv/bin/uvicorn src.aegis_trade.api.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -13,10 +13,25 @@ interface RiskSnapshot {
   risk_status: string;
 }
 
+interface BrokerSnapshot {
+  connected: boolean;
+  latency_ms: number;
+  gateway: string;
+  last_heartbeat: string;
+}
+
+interface StrategySnapshot {
+  id: string;
+  status: string;
+  running_time: string;
+}
+
 interface SystemSnapshot {
   cpu_usage: number;
   memory_usage: number;
   active_services: string[];
+  broker_status?: BrokerSnapshot;
+  strategy_status?: StrategySnapshot;
 }
 
 interface PositionSnapshot {

@@ -9,7 +9,7 @@ from aegis_trade.engine.events import (
 )
 from aegis_trade.application.monitoring.models import (
     PortfolioSnapshot, PositionSnapshot, RiskSnapshot, SystemSnapshot,
-    PerformanceSnapshot, PaperTradingSnapshot
+    PerformanceSnapshot, PaperTradingSnapshot, BrokerSnapshot, StrategySnapshot
 )
 
 class MonitoringEngine:
@@ -46,7 +46,22 @@ class MonitoringEngine:
             risk_status="NORMAL"
         )
         self.system = SystemSnapshot(
-            timestamp=now, cpu_usage=0.0, memory_usage=0.0, disk_usage=0.0, active_services=[]
+            timestamp=now, 
+            cpu_usage=0.0, 
+            memory_usage=0.0, 
+            disk_usage=0.0, 
+            active_services=["api", "ws"],
+            broker_status=BrokerSnapshot(
+                connected=True,
+                latency_ms=12.5,
+                gateway="BINANCE",
+                last_heartbeat=now
+            ),
+            strategy_status=StrategySnapshot(
+                id="alpha_momentum_v1",
+                status="Live",
+                running_time="14h 22m"
+            )
         )
 
     def register_callback(self, callback: Callable[[str, BaseModel], Awaitable[None]]):

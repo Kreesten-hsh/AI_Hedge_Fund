@@ -1,0 +1,28 @@
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    UV_SYSTEM_PYTHON=1
+
+WORKDIR /app
+
+# Install system dependencies for vn.py and other numerical libraries
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libssl-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install UV
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
+
+# Install dependencies
+COPY pyproject.toml .
+RUN uv pip install -r pyproject.toml
+
+# Copy application source
+COPY src/ /app/src/
+
+# Run the API
+CMD ["uvicorn", "aegis_trade.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

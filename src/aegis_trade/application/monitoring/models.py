@@ -25,12 +25,25 @@ class RiskSnapshot(BaseModel):
     distance_to_max_drawdown: Decimal
     risk_status: str # NORMAL, WARNING, CRITICAL, HALTED
 
+class BrokerSnapshot(BaseModel):
+    connected: bool
+    latency_ms: float
+    gateway: str
+    last_heartbeat: datetime
+
+class StrategySnapshot(BaseModel):
+    id: str
+    status: str # Idle, Training, Paper, Live, Stopped, Error
+    running_time: str
+
 class SystemSnapshot(BaseModel):
     timestamp: datetime
     cpu_usage: float
     memory_usage: float
     disk_usage: float
     active_services: List[str]
+    broker_status: Optional[BrokerSnapshot] = None
+    strategy_status: Optional[StrategySnapshot] = None
 
 class PerformanceSnapshot(BaseModel):
     timestamp: datetime

@@ -73,6 +73,7 @@ class OrderEvent(EngineEvent):
     volume: Decimal
     order_type: str = "market" # market, limit, stop, etc.
     strategy_id: str = "unknown"
+    context_features: dict = field(default_factory=dict)
     
     def __post_init__(self) -> None:
         object.__setattr__(self, 'event_type', EngineEventType.ORDER)
@@ -129,6 +130,7 @@ class PositionEvent(EngineEvent):
     action: str # opened, closed, updated
     volume: Decimal
     average_price: Decimal
+    context_features: dict = field(default_factory=dict)
     
     def __post_init__(self) -> None:
         object.__setattr__(self, 'event_type', EngineEventType.POSITION)

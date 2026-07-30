@@ -115,7 +115,8 @@ class MonitoringEngine:
                     entry_price=ev.average_price,
                     current_price=ev.average_price,
                     unrealized_pnl=Decimal(0),
-                    open_timestamp=open_ts
+                    open_timestamp=open_ts,
+                    opening_context=getattr(ev, "context_features", {})
                 )
             elif ev.action == "closed":
                 if symbol_name in self.positions:
@@ -176,15 +177,20 @@ class MonitoringEngine:
         # Create a basic Experience object from the trade
         cat = MemoryCategory.SUCCESS if trade.realized_pnl_percent > 0 else MemoryCategory.FAILURE
         
-        # Dummy features for now since we didn't save MarketContext at trade open
+        # Use stored real features or fallbacks if none exist
+        context = pos.opening_context or {}
+        real_rsi = context.get("rsi", 50.0)
+        real_ema_distance = context.get("ema_distance", 0.0)
+        real_atr = context.get("atr", 0.1)
+
         features = MarketFeatures(
             price=float(trade.entry_price), open_price=float(trade.entry_price),
             high_price=float(trade.entry_price), low_price=float(trade.entry_price),
             close_price=float(trade.entry_price), spread=0.01, volume=100.0,
             order_book_imbalance=0.0, time_of_day=10.0, session=MarketSession.NEW_YORK,
             time_since_economic_event_min=60.0, economic_calendar_flag=False,
-            ema_distance=random.uniform(-0.5, 0.5), rsi=random.uniform(30.0, 70.0), 
-            macd=0.0, momentum_roc=0.0, vwap_distance=0.0, atr=0.1, volatility_state=0.0, 
+            ema_distance=real_ema_distance, rsi=real_rsi, 
+            macd=0.0, momentum_roc=0.0, vwap_distance=0.0, atr=real_atr, volatility_state=0.0, 
             liquidity_density=0.0, portfolio_correlation=0.0
         )
         

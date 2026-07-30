@@ -80,7 +80,8 @@ class PaperBroker(IPaperBroker):
             volume=order.volume,
             price=execution_price,
             commission=commission,
-            timestamp=datetime.now(timezone.utc)
+            timestamp=datetime.now(timezone.utc),
+            context_features=getattr(order, "context_features", {})
         )
 
         execution = PaperExecution(
@@ -194,5 +195,6 @@ class PaperBroker(IPaperBroker):
             symbol=fill.symbol,
             action="opened" if new_volume == fill.volume else "updated",
             volume=new_volume,
-            average_price=new_avg
+            average_price=new_avg,
+            context_features=getattr(fill, "context_features", {})
         ))

@@ -69,7 +69,7 @@ class MultiAgentCouncil:
             disagreement_level=disagreement
         )
 
-    def create_order(self, verdict: CouncilVerdict, symbol: Symbol, base_volume: float) -> Optional[OrderEvent]:
+    def create_order(self, verdict: CouncilVerdict, symbol: Symbol, base_volume: float, context: Optional[MarketContext] = None) -> Optional[OrderEvent]:
         """
         Transforms a successful verdict into an OrderEvent (ready to be routed to GlobalRiskManager).
         """
@@ -86,5 +86,6 @@ class MultiAgentCouncil:
             action=action,
             volume=final_volume,
             order_type="MARKET",
-            timestamp=datetime.now(timezone.utc)
+            timestamp=datetime.now(timezone.utc),
+            context_features=context.features if context else {}
         )

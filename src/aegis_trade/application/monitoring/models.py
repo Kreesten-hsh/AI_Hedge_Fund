@@ -19,6 +19,7 @@ class PositionSnapshot(BaseModel):
     current_price: Decimal
     unrealized_pnl: Decimal
     open_timestamp: datetime
+    opening_context: Optional[dict] = None
 
 class RiskSnapshot(BaseModel):
     timestamp: datetime

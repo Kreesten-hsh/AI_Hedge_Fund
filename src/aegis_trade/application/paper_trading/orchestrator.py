@@ -78,7 +78,10 @@ class PaperTradingOrchestrator:
                     "pattern_score": 0.5,
                     "news_score": 0.5,
                     "portfolio_risk": 0.5,
-                    "execution_cost": 0.5
+                    "execution_cost": 0.5,
+                    "rsi": 55.0,
+                    "ema_distance": 0.1,
+                    "atr": 1.5
                 },
                 portfolio=self.portfolio_engine,
                 latest_prices={bar.symbol: Decimal(str(bar.close))},
@@ -120,7 +123,7 @@ class PaperTradingOrchestrator:
             
             # 4. Generate OrderEvent if verdict is actionable
             base_volume = 1.0  # Base size to be scaled by council/RL
-            order_event = self.council.create_order(verdict, bar.symbol, base_volume)
+            order_event = self.council.create_order(verdict, bar.symbol, base_volume, context)
             
             if not order_event:
                 continue
@@ -141,7 +144,8 @@ class PaperTradingOrchestrator:
                 action=ActionType.BUY if order_event.action.value.upper() == "BUY" else ActionType.SELL,
                 order_type=OrderType.MARKET,
                 volume=Decimal(str(order_event.volume)),
-                timestamp=datetime.now(timezone.utc)
+                timestamp=datetime.now(timezone.utc),
+                context_features=getattr(order_event, "context_features", {})
             )
 
             # 7. Submit to Paper Broker

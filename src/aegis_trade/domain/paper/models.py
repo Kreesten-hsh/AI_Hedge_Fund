@@ -48,6 +48,7 @@ class PaperOrder:
     state: OrderState = OrderState.CREATED
     filled_volume: Decimal = Decimal("0.0")
     average_fill_price: Decimal = Decimal("0.0")
+    context_features: dict = field(default_factory=dict)
     
     def can_transition_to(self, new_state: OrderState) -> bool:
         valid_transitions = {
@@ -73,6 +74,7 @@ class PaperFill:
     price: Decimal
     commission: Decimal
     timestamp: datetime
+    context_features: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

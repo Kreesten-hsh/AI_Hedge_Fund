@@ -39,6 +39,10 @@ class PaperTradingOrchestrator:
         self._monitoring_task = None
         self._market_feed_task = None
         self.is_running = False
+        
+        # Dashboard exposure
+        self.latest_verdict = None
+        self.latest_policy = None
 
     async def start(self):
         """Starts the market feed and the monitoring loop."""
@@ -109,6 +113,10 @@ class PaperTradingOrchestrator:
 
             # 3. Council Evaluation
             verdict = self.council.evaluate(context, policy_decision)
+            
+            # Save for dashboard
+            self.latest_policy = policy_decision
+            self.latest_verdict = verdict
             
             # 4. Generate OrderEvent if verdict is actionable
             base_volume = 1.0  # Base size to be scaled by council/RL

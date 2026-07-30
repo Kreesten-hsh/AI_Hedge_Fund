@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import Dict, Any
 
 from aegis_trade.api.routers import system, portfolio, orders, positions, risk, observability, trades
+from aegis_trade.api.routers import council, capital, knowledge, validation
 from aegis_trade.api.ws.manager import ws_router
 
 app = FastAPI(
@@ -27,6 +28,10 @@ app.include_router(trades.router, prefix="/api/trades", tags=["Trades"])
 app.include_router(positions.router, prefix="/api/positions", tags=["Positions"])
 app.include_router(risk.router, prefix="/api/risk", tags=["Risk"])
 app.include_router(observability.router, prefix="/api/obs", tags=["Observability"])
+app.include_router(council.router, prefix="/api/council", tags=["Council"])
+app.include_router(capital.router, prefix="/api/capital", tags=["Capital"])
+app.include_router(knowledge.router, prefix="/api/knowledge", tags=["Knowledge"])
+app.include_router(validation.router, prefix="/api/validation", tags=["Validation"])
 app.include_router(ws_router, prefix="/ws", tags=["WebSocket"])
 
 @app.get("/")

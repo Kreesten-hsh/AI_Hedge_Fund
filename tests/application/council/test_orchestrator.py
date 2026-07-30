@@ -104,3 +104,12 @@ def test_orchestrator_integration_with_risk_manager(basic_context):
     # Assuming it's approved by default if no drawdown limit breached
     assert is_approved is True
     assert event == order
+
+def test_council_orchestrator_with_zero_agents_returns_wait(basic_context):
+    council = MultiAgentCouncil(agents=[])
+    verdict = council.evaluate(basic_context)
+    
+    # Aggregator should fallback to WAIT
+    assert verdict.final_vote == "WAIT"
+    assert verdict.position_size_multiplier == 0.0
+    assert verdict.aggregated_confidence == 0.0

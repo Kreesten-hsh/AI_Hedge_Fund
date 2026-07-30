@@ -10,6 +10,21 @@ from aegis_trade.engine.portfolio import PortfolioEngine
 from aegis_trade.application.council.orchestrator import MultiAgentCouncil
 from aegis_trade.infrastructure.rl.policy_checkpoint_store import PolicyCheckpointStore
 
+from aegis_trade.infrastructure.reasoning.knowledge_repo import InMemoryKnowledgeRepository
+from aegis_trade.application.reasoning.llm_adapter import MockReasoner
+from aegis_trade.application.reasoning.knowledge import KnowledgeGenerator
+from aegis_trade.application.reasoning.clustering import DBSCANClusterEngine
+from aegis_trade.application.reasoning.analyzer import ExperienceAnalyzer
+
+from aegis_trade.application.council.agents.trend_agent import TrendAgent
+from aegis_trade.application.council.agents.momentum_agent import MomentumAgent
+from aegis_trade.application.council.agents.volatility_agent import VolatilityAgent
+from aegis_trade.application.council.agents.liquidity_agent import LiquidityAgent
+from aegis_trade.application.council.agents.pattern_agent import PatternAgent
+from aegis_trade.application.council.agents.portfolio_agent import PortfolioAgent
+from aegis_trade.application.council.agents.execution_agent import ExecutionAgent
+from aegis_trade.application.council.agents.news_agent import NewsAgent
+
 # Global instance for the local API
 _monitoring_engine = MonitoringEngine()
 _dashboard_service = DashboardService(_monitoring_engine)
@@ -33,8 +48,29 @@ def get_orchestrator() -> PaperTradingOrchestrator:
         risk_manager = GlobalRiskManager(max_drawdown=Decimal("0.05"))
         portfolio = PortfolioEngine(initial_capital=Decimal("1000.0"))
         
+        # AI-03 Reasoning Dependencies
+        knowledge_repo = InMemoryKnowledgeRepository()
+        reasoner = MockReasoner()
+        knowledge_generator = KnowledgeGenerator(reasoner=reasoner)
+        cluster_engine = DBSCANClusterEngine()
+        experience_analyzer = ExperienceAnalyzer()
+        
+        # Make these globally available via monitoring engine for post-trade async processing
+        _monitoring_engine.knowledge_repo = knowledge_repo
+        _monitoring_engine.knowledge_generator = knowledge_generator
+        _monitoring_engine.cluster_engine = cluster_engine
+        
         council = MultiAgentCouncil(
-            agents=[]
+            agents=[
+                TrendAgent(),
+                MomentumAgent(),
+                VolatilityAgent(),
+                LiquidityAgent(),
+                PatternAgent(knowledge_repo=knowledge_repo),
+                PortfolioAgent(),
+                ExecutionAgent(),
+                NewsAgent()
+            ]
         )
         
         _orchestrator = PaperTradingOrchestrator(

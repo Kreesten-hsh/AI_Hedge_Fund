@@ -12,8 +12,10 @@ from aegis_trade.application.monitoring.models import (
     PerformanceSnapshot, PaperTradingSnapshot, BrokerSnapshot, StrategySnapshot
 )
 from aegis_trade.domain.trade_record import TradeRecord, TradeMode
+from aegis_trade.domain.memory import Experience, MarketFeatures, MemoryCategory, MarketSession
 import uuid
 import os
+import random
 
 class MonitoringEngine:
     def __init__(self):
@@ -33,6 +35,12 @@ class MonitoringEngine:
         self.history_5m: List[PortfolioSnapshot] = []
         self.history_1h: List[PortfolioSnapshot] = []
         self.history_1d: List[PortfolioSnapshot] = []
+        
+        # Reasoning references injected via deps
+        self.knowledge_repo = None
+        self.knowledge_generator = None
+        self.cluster_engine = None
+        self.experience_buffer: List[Experience] = []
         
         # Callbacks for WebSocket broadcasting
         self.on_snapshot_updated: List[Callable[[str, BaseModel], Awaitable[None]]] = []
@@ -140,6 +148,9 @@ class MonitoringEngine:
                     self.trades.append(trade)
                     del self.positions[symbol_name]
                     updated_topics.append(("trades", trade)) # Broadcast new trade
+                    
+                    # AI-03: Trigger reflection asynchronously
+                    asyncio.create_task(self._run_reflection_pipeline(trade, pos))
 
             
             self.portfolio.open_positions_count = len(self.positions)
@@ -157,3 +168,55 @@ class MonitoringEngine:
 
     def get_trades(self) -> List[TradeRecord]:
         return self.trades
+
+    async def _run_reflection_pipeline(self, trade: TradeRecord, pos: PositionSnapshot):
+        if not self.knowledge_repo or not self.cluster_engine or not self.knowledge_generator:
+            return
+            
+        # Create a basic Experience object from the trade
+        cat = MemoryCategory.SUCCESS if trade.realized_pnl_percent > 0 else MemoryCategory.FAILURE
+        
+        # Dummy features for now since we didn't save MarketContext at trade open
+        features = MarketFeatures(
+            price=float(trade.entry_price), open_price=float(trade.entry_price),
+            high_price=float(trade.entry_price), low_price=float(trade.entry_price),
+            close_price=float(trade.entry_price), spread=0.01, volume=100.0,
+            order_book_imbalance=0.0, time_of_day=10.0, session=MarketSession.NEW_YORK,
+            time_since_economic_event_min=60.0, economic_calendar_flag=False,
+            ema_distance=random.uniform(-0.5, 0.5), rsi=random.uniform(30.0, 70.0), 
+            macd=0.0, momentum_roc=0.0, vwap_distance=0.0, atr=0.1, volatility_state=0.0, 
+            liquidity_density=0.0, portfolio_correlation=0.0
+        )
+        
+        exp = Experience(
+            id=f"EXP-{uuid.uuid4().hex[:8]}",
+            timestamp=trade.close_timestamp,
+            symbol=trade.symbol,
+            timeframe="1m",  # Or get from trade if we have it
+            features=features,
+            decision_side=trade.side,
+            pnl=trade.realized_pnl_amount,
+            max_drawdown=Decimal(0),
+            duration_seconds=int(trade.duration_seconds),
+            category=cat,
+            embedding=(float(features.rsi), float(features.ema_distance), float(features.atr))
+        )
+        
+        self.experience_buffer.append(exp)
+        
+        # Run clustering if we have enough recent experiences
+        if len(self.experience_buffer) >= 5:
+            vectors = [list(e.embedding) for e in self.experience_buffer]
+            metadata = [{"id": e.id, "category": e.category} for e in self.experience_buffer]
+            
+            # Use basic clustering logic from HDBSCAN/DBSCAN in the engine
+            clusters = self.cluster_engine.find_clusters(vectors, metadata)
+            
+            for cluster in clusters:
+                if cluster.size >= 3: # Min cluster size to generate knowledge
+                    knowledge = self.knowledge_generator.generate_from_cluster(cluster)
+                    if knowledge:
+                        self.knowledge_repo.save(knowledge)
+                        
+            # Keep rolling buffer
+            self.experience_buffer = self.experience_buffer[-10:]

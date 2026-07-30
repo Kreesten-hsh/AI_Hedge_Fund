@@ -151,11 +151,12 @@ Ce document détaille l'audit technique de chaque dépôt (actif et inspirationn
 - **Pourquoi ne pas le réécrire nous-mêmes ?** Fine-tuner LLaMA sur des rapports financiers coûte des milliers de dollars en cloud.
 - **Modules utilisés :** HuggingFace Transformers, bitsandbytes (Quantization).
 - **Ce que nous gardons :** Le modèle GGML/GGUF pour exécution locale via `llama.cpp` dans l'adaptateur `OllamaReasoner` du Reasoning Engine (AI-03).
+- **Dette Technique (MockReasoner) :** Actuellement, le système utilise `MockReasoner` par défaut pour ne pas bloquer l'Event Loop si Ollama n'est pas lancé. Conséquence : les objets `Knowledge` générés ne contiennent que des règles statistiques brutes (`AvoidPattern`/`PreferredPattern`) sans résumé textuel généré. Il faudra trancher plus tard sur l'activation d'Ollama local en production.
 - **Architecture :** Transformer LLM.
 - **Temps estimé :** N/A (Abandonné actif).
 - **RAM/GPU :** 8-16 GB VRAM.
 - **Risques :** Hallucination.
-- **Alternatives :** Ollama (Générique, actuellement utilisé et suffisant).
+- **Alternatives :** Ollama (Générique, actuellement utilisé via Mock/Fallback).
 
 ---
 

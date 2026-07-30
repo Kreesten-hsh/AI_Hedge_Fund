@@ -21,3 +21,4 @@
 - ~~**[AI-06-A]** Historical & Replay Validation (TickReplayEngine, BenchmarkGate).~~ *(Fait)*
 - ~~**[AI-06-B]** Live Paper Trading & Shadow Trading (DerivGateway, ShadowTradingEngine).~~ *(Fait)*
 - ~~**[AI-07-A]** Micro Capital Live Trading (LiveDerivGateway, CapitalAllocation, sécurité).~~ *(Fait)*
+- **[AI-08-A] [PAUSED]** Intégration Kronos-mini Forecasting (Fine-tuning offline repoussé).

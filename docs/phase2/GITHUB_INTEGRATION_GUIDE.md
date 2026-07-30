@@ -88,7 +88,7 @@ Ce document détaille l'audit technique de chaque dépôt (actif et inspirationn
 ---
 
 ## 5. Kronos (Niveau S - Forecasting)
-- **Statut CTO :** En évaluation — variante mini uniquement, CPU.
+- **Statut CTO :** Reporté (PAUSED). L'inférence CPU est légère (< 300MB RAM), mais la boucle de fine-tuning offline nécessite des composants internes spécifiques d'Amazon Science (TimeSeriesPreprocessor) complexes à réimplémenter sans l'environnement d'origine.
 - **Pourquoi l'utiliser ?** Modèle LLM pré-entraîné pour le forecasting Zero-Shot sur séries temporelles.
 - **Pourquoi ne pas le réécrire nous-mêmes ?** Entraîner un LLM Time-Series demande un cluster de GPU H100 et des mois de compute.
 - **Modules utilisés :** Inférence locale.
@@ -97,7 +97,7 @@ Ce document détaille l'audit technique de chaque dépôt (actif et inspirationn
 - **Architecture :** Transformer.
 - **Ce que nous gardons :** Les poids pré-entraînés et le script d'inférence.
 - **Ce que nous supprimons :** Le pipeline d'entraînement distribué.
-- **Temps estimé :** En évaluation (Hors chemin critique).
+- **Temps estimé :** Reporté (Hors chemin critique).
 - **RAM :** ~2-4 GB pour Kronos-mini.
 - **CPU :** Inférence CPU-only (batch asynchrone).
 - **GPU :** Aucun (utilisation stricte de Kronos-mini, 4.1M paramètres, conçu pour environnements contraints CPU).

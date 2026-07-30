@@ -6,6 +6,7 @@
 - `[ ]` : À faire
 - `[CODE-READY]` : L'implémentation est terminée et testée unitairement, en attente de validation réelle.
 - `[x] VALIDATED` : Le cycle réel a tourné et le rapport affiche un verdict GO pour cette étape.
+- `[PAUSED]` : Composant évalué mais dont l'intégration est mise en pause ou reportée.
 
 Le développement de la Phase 2 est séquencé en 7 missions strictement interdépendantes, aboutissant sur un pipeline de validation de niveau institutionnel.
 
@@ -23,6 +24,10 @@ Le développement de la Phase 2 est séquencé en 7 missions strictement interd�
 
 ## [CODE-READY] AI-05 : Multi Agent Council
 **Objectif :** Implémenter le comité de prise de décision (Trend, Momentum, Volatility, etc.) en utilisant le Reinforcement Learning et les règles validées par le Reasoning Engine.
+
+## [PAUSED] AI-08 : Kronos-mini Forecasting
+**Objectif :** Intégrer les prédictions LLM Time-Series dans les agents Trend et Pattern.
+**Statut :** Inférence CPU validée (<300MB RAM), mais boucle de fine-tuning complexe à réimplémenter sans l'environnement d'Amazon Science. Reporté post-Phase 2.
 
 ---
 ## Pipeline de Validation (AI-06 à AI-07)

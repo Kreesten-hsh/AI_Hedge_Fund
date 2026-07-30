@@ -143,16 +143,42 @@ class DerivGateway(IPaperBroker):
         return True
 
     async def cancel_all_orders(self) -> int:
-        """Mock cancellation of all orders."""
-        logger.warning("DerivGateway: Cancelling all active orders.")
-        # In a real scenario, fetch all open orders and cancel them one by one or via bulk API
-        return 0
+        """Real cancellation of all active orders via API."""
+        count = 0
+        if self.api:
+            try:
+                logger.warning("DerivGateway: Fetching open orders to cancel.")
+                portfolio_res = await self.api.portfolio()
+                contracts = portfolio_res.get('portfolio', {}).get('contracts', [])
+                for contract in contracts:
+                    contract_id = contract.get('contract_id')
+                    if contract_id:
+                        await self.api.sell({"sell": contract_id, "price": 0})
+                        count += 1
+            except Exception as e:
+                logger.error(f"Deriv API cancel_all_orders failed: {e}")
+        else:
+            logger.warning("DerivGateway: API not connected, mock cancel_all_orders.")
+        return count
 
     async def close_all_positions(self) -> int:
-        """Mock closing of all open positions."""
-        logger.warning("DerivGateway: Closing all open positions at market price.")
-        # In a real scenario, fetch all open positions and submit opposite market orders
-        return 0
+        """Real closing of all open positions via API."""
+        count = 0
+        if self.api:
+            try:
+                logger.warning("DerivGateway: Fetching open positions to close.")
+                portfolio_res = await self.api.portfolio()
+                contracts = portfolio_res.get('portfolio', {}).get('contracts', [])
+                for contract in contracts:
+                    contract_id = contract.get('contract_id')
+                    if contract_id:
+                        await self.api.sell({"sell": contract_id, "price": 0})
+                        count += 1
+            except Exception as e:
+                logger.error(f"Deriv API close_all_positions failed: {e}")
+        else:
+            logger.warning("DerivGateway: API not connected, mock close_all_positions.")
+        return count
 
 class LiveDerivGateway(DerivGateway):
     """

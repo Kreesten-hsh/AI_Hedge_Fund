@@ -96,17 +96,31 @@ class MonitoringEngine:
             symbol_name = ev.symbol.name
             
             if ev.action == "opened" or ev.action == "updated":
+                existing = self.positions.get(symbol_name)
+                open_ts = existing.open_timestamp if existing else now
                 self.positions[symbol_name] = PositionSnapshot(
                     symbol=symbol_name,
                     side="LONG" if ev.volume > 0 else "SHORT",
                     quantity=ev.volume,
                     entry_price=ev.average_price,
                     current_price=ev.average_price,
-                    unrealized_pnl=Decimal(0)
+                    unrealized_pnl=Decimal(0),
+                    open_timestamp=open_ts
                 )
             elif ev.action == "closed":
                 if symbol_name in self.positions:
                     pos = self.positions[symbol_name]
+                    # Calculate real PnL
+                    multiplier = Decimal(1) if pos.side == "LONG" else Decimal(-1)
+                    realized_pnl_amount = (ev.average_price - pos.entry_price) * pos.quantity * multiplier
+                    
+                    if pos.entry_price > 0 and pos.quantity > 0:
+                        realized_pnl_percent = (realized_pnl_amount / (pos.entry_price * pos.quantity)) * Decimal(100)
+                    else:
+                        realized_pnl_percent = Decimal(0)
+                        
+                    duration = (now - pos.open_timestamp).total_seconds()
+                    
                     # Create a TradeRecord based on the position that just closed
                     trade = TradeRecord(
                         trade_id=f"TRD-{uuid.uuid4().hex[:8]}",
@@ -115,11 +129,11 @@ class MonitoringEngine:
                         entry_price=pos.entry_price,
                         exit_price=ev.average_price,
                         volume=pos.quantity,
-                        realized_pnl_amount=Decimal(0), # Calculate actual later if possible
-                        realized_pnl_percent=Decimal(0),
-                        open_timestamp=now, # We don't have open time in PositionSnapshot, use now as fallback
+                        realized_pnl_amount=realized_pnl_amount,
+                        realized_pnl_percent=realized_pnl_percent,
+                        open_timestamp=pos.open_timestamp,
                         close_timestamp=now,
-                        duration_seconds=0.0
+                        duration_seconds=duration
                     )
                     self.trades.append(trade)
                     del self.positions[symbol_name]

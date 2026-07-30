@@ -18,6 +18,7 @@ class PositionSnapshot(BaseModel):
     entry_price: Decimal
     current_price: Decimal
     unrealized_pnl: Decimal
+    open_timestamp: datetime
 
 class RiskSnapshot(BaseModel):
     timestamp: datetime

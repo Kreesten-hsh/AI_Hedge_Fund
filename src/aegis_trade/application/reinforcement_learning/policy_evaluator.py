@@ -3,7 +3,7 @@ Policy Evaluator (Policy Promotion Gate).
 """
 
 from typing import List, Dict, Any, Tuple
-from src.aegis_trade.domain.rl import IPolicyStore
+from aegis_trade.domain.rl import IPolicyStore
 
 class PolicyEvaluator:
     """
@@ -34,6 +34,12 @@ class PolicyEvaluator:
         
         if candidate_reward >= current_reward and candidate_drawdown <= current_drawdown:
             # Emit PolicyPromoted event
+            metrics = {
+                "reward": candidate_reward,
+                "max_drawdown": candidate_drawdown,
+                "previous_model_id": current_model_id
+            }
+            self.policy_store.promote_to_active(candidate_model_id, metrics)
             return True, "Candidate promoted: Better or equal reward without degrading drawdown."
         else:
             # Emit PolicyRejected event

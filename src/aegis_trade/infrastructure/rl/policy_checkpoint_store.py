@@ -5,10 +5,16 @@ Handles the persistence of trained RL models (.zip files).
 
 import os
 import shutil
-from typing import Any
+import json
+import logging
+import tempfile
+from datetime import datetime, timezone
+from typing import Any, Dict
 from stable_baselines3 import PPO
 
-from src.aegis_trade.domain.rl import IPolicyStore
+logger = logging.getLogger(__name__)
+
+from aegis_trade.domain.rl import IPolicyStore
 
 class PolicyCheckpointStore(IPolicyStore):
     """
@@ -39,3 +45,48 @@ class PolicyCheckpointStore(IPolicyStore):
         # Hardcoding PPO for MVP. In a more flexible setup, this could read metadata to determine algo.
         model = PPO.load(path, device="cpu")
         return model
+
+    def promote_to_active(self, model_id: str, metrics: Dict[str, Any]) -> None:
+        """
+        Atomically writes the active_policy.json metadata file.
+        """
+        meta_path = os.path.join(self.storage_dir, "active_policy.json")
+        data = {
+            "model_id": model_id,
+            "promoted_at": datetime.now(timezone.utc).isoformat(),
+            "metrics": metrics
+        }
+        
+        # Atomic write
+        fd, temp_path = tempfile.mkstemp(dir=self.storage_dir, prefix="active_", suffix=".tmp")
+        try:
+            with os.fdopen(fd, 'w') as f:
+                json.dump(data, f, indent=4)
+            # Rename is atomic on POSIX
+            os.replace(temp_path, meta_path)
+            logger.info(f"Policy {model_id} promoted to active.")
+        except Exception as e:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            raise e
+
+    def load_active_policy(self) -> Any:
+        """
+        Loads the active policy. If none exists or fails, returns None and logs a warning.
+        """
+        meta_path = os.path.join(self.storage_dir, "active_policy.json")
+        if not os.path.exists(meta_path):
+            logger.warning(f"No active_policy.json found at {meta_path}. Falling back to default policy.")
+            return None
+            
+        try:
+            with open(meta_path, "r") as f:
+                data = json.load(f)
+            model_id = data.get("model_id")
+            if not model_id:
+                logger.warning("active_policy.json is missing 'model_id'. Falling back.")
+                return None
+            return self.load_policy(model_id)
+        except Exception as e:
+            logger.warning(f"Failed to load active policy: {e}. Falling back.")
+            return None

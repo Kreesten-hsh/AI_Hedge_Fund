@@ -4,7 +4,7 @@ Tests for Policy Checkpoint Store.
 
 import os
 import pytest
-from src.aegis_trade.infrastructure.rl.policy_checkpoint_store import PolicyCheckpointStore
+from aegis_trade.infrastructure.rl.policy_checkpoint_store import PolicyCheckpointStore
 
 # Mock stable_baselines3 to avoid actual torch/SB3 initialization during unit tests
 import sys

@@ -12,8 +12,8 @@ sys.modules['stable_baselines3'] = MagicMock()
 sys.modules['stable_baselines3.common.env_util'] = MagicMock()
 sys.modules['stable_baselines3.common.vec_env'] = MagicMock()
 
-from src.aegis_trade.infrastructure.rl.sb3_policy_adapter import SB3PolicyAdapter
-from src.aegis_trade.domain.rl import IPolicyStore
+from aegis_trade.infrastructure.rl.sb3_policy_adapter import SB3PolicyAdapter
+from aegis_trade.domain.rl import IPolicyStore
 
 
 def test_sb3_adapter_initialization():
@@ -26,7 +26,7 @@ def test_sb3_adapter_initialization():
     assert adapter.policy_store == mock_store
 
 
-@patch("src.aegis_trade.infrastructure.rl.sb3_policy_adapter.PPO")
+@patch('aegis_trade.infrastructure.rl.sb3_policy_adapter.PPO')
 def test_sb3_adapter_train(mock_ppo):
     mock_env = MagicMock()
     mock_store = MagicMock(spec=IPolicyStore)

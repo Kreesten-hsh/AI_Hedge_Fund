@@ -75,6 +75,19 @@ class IPolicyStore(Protocol):
     def load_policy(self, model_id: str) -> Any:
         ...
 
+    def load_active_policy(self) -> Any:
+        """
+        Loads the currently active (promoted) policy.
+        Returns None or raises fallback if none is active.
+        """
+        ...
+
+    def promote_to_active(self, model_id: str, metrics: Dict[str, Any]) -> None:
+        """
+        Marks a specific model as the active policy with the given metrics.
+        """
+        ...
+
 
 class ITrainingEnvironment(Protocol):
     """

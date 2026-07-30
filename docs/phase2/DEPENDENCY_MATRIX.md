@@ -1,19 +1,20 @@
 # Matrice des Dépendances (Dependency Matrix)
 
-| Repo | Statut | Valeur | Sprint | Modules utilisés |
+| Repo / Package | Statut | Valeur | Fichiers d'implémentation réels | Modules utilisés |
 |------|--------|--------|--------|------------------|
-| vn.py | 100% | Broker Execution | LIVE-02 (Terminé) | `gateway.mt5`, `event_engine` |
-| OpenBB | 30% | Macro Data | AI-04 | `openbb-core` |
-| Qlib | 10% | Feature Extr. | AI-02 | `dataset`, `features` |
-| FinRL | 100% | Reinforcement | AI-04 | DRL algorithms (SB3 wrappers) |
-| Kronos | 0% | Forecasting | AI-02 | Time-Series Inference (PyTorch) |
-| FinGPT | 0% | Raisonnement | AI-02 | LLM Prompting & Analysis |
-| TradingAgents | 15% | Architecture | AI-04 | Multi-Agent Coordination Design |
-| AutoHedge | 20% | Orchestration | AI-04 | Logic Flows & Feedback Loops |
-| lightweight-charts | 0% | Dashboard | AI-01 | React integration, Canvas charting |
-| FinceptTerminal | 5% | UI/UX | AI-01 | Design inspiration only |
-| Vibe-Trading | 5% | UI/UX | AI-01 | Design inspiration only |
-| Zipline | 0% | Abandonné | N/A | Aucun |
-| QuantLib | 0% | Abandonné | N/A | Aucun |
-| AkShare | 0% | Abandonné | N/A | Aucun |
-| daily_stock_analysis | 0% | Abandonné | N/A | Aucun |
+| python-deriv-api | Intégré | Broker Live | `infrastructure/paper/deriv_gateway.py` | `DerivGateway`, `LiveDerivGateway` |
+| MetaTrader5 | Intégré | Broker Legacy | `providers/mt5_provider.py`, `providers/normalization.py` | `MT5Provider` |
+| OpenBB | Intégré | Macro Data | `infrastructure/data/providers/openbb_provider.py` | `OpenBBDataProvider` |
+| Qlib | Intégré | Feature Extr. | `providers/qlib_adapter.py`, `providers/qlib/*`, `application/strategy/ml_strategy.py` | `QlibAdapter`, `QlibDataset`, `QlibPredictor` |
+| stable_baselines3 (FinRL) | Intégré | Reinforcement | `infrastructure/rl/sb3_policy_adapter.py`, `infrastructure/rl/policy_checkpoint_store.py` | `PPO`, `DummyVecEnv` |
+| Kronos | Reporté | Forecasting | N/A (Matériel insuffisant) | Aucun |
+| FinGPT | Abandonné | Raisonnement | N/A (Remplacé par Ollama local) | Aucun |
+| lightweight-charts | Planifié | Dashboard | N/A (Attente Dashboard spec) | React integration, Canvas charting |
+| TradingAgents | Abandonné | Architecture | N/A (Architecture custom) | Aucun |
+| AutoHedge | Abandonné | Orchestration | N/A (Architecture custom) | Aucun |
+| FinceptTerminal | Abandonné | UI/UX | N/A | Design inspiration only |
+| Vibe-Trading | Abandonné | UI/UX | N/A | Design inspiration only |
+| Zipline | Abandonné | N/A | N/A | Aucun |
+| QuantLib | Abandonné | N/A | N/A | Aucun |
+| AkShare | Abandonné | N/A | N/A | Aucun |
+| daily_stock_analysis | Abandonné | N/A | N/A | Aucun |

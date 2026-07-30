@@ -33,6 +33,9 @@ Pourquoi: (Commentaire auto-généré par le LLM post-trade)
 
 *Les logs des 200 trades du cycle papier réel et du cycle capital réel (AI-07) seront injectés ici automatiquement.*
 
+## Événements de Gouvernance
+- **[2026-07-30] Correction de Gouvernance (Post AI-07)** : Alignement de la Roadmap (`PHASE2_ROADMAP.md`) avec le `VALIDATION_PIPELINE_REPORT.md` réel. Modification des statuts de AI-06/AI-07 à `[CODE-READY]` pour refléter l'attente de tests réels sans argent simulé. Audit réel de `DEPENDENCY_MATRIX.md` effectué sur la base du code (utilisation d'OpenBB, Qlib, SB3/FinRL, Deriv). Décision tranchée pour Kronos (Reporté, contrainte GPU), FinGPT (Abandonné, remplacé par Ollama) et lightweight-charts (Planifié post-validation spec).
+
 ## Logs de Validation de Politique (Policy Promotion Gate)
 Trace des validations de politiques RL (AI-04).
 - *[DATE] Policy [ID] évaluée vs [ID_ACTUELLE]. Statut : PROMOTED / REJECTED.*

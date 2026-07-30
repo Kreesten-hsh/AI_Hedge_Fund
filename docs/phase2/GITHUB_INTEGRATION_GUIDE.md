@@ -88,6 +88,7 @@ Ce document détaille l'audit technique de chaque dépôt (actif et inspirationn
 ---
 
 ## 5. Kronos (Niveau S - Forecasting)
+- **Statut CTO :** Reporté (pas abandonné).
 - **Pourquoi l'utiliser ?** Modèle LLM pré-entraîné pour le forecasting Zero-Shot sur séries temporelles.
 - **Pourquoi ne pas le réécrire nous-mêmes ?** Entraîner un LLM Time-Series demande un cluster de GPU H100 et des mois de compute.
 - **Modules utilisés :** Inférence locale.
@@ -96,10 +97,10 @@ Ce document détaille l'audit technique de chaque dépôt (actif et inspirationn
 - **Architecture :** Transformer.
 - **Ce que nous gardons :** Les poids pré-entraînés et le script d'inférence.
 - **Ce que nous supprimons :** Le pipeline d'entraînement distribué.
-- **Temps estimé :** 2 Semaines.
+- **Temps estimé :** Reporté.
 - **RAM :** 8 GB.
 - **CPU :** Élevé.
-- **GPU :** Obligatoire (4-8 GB VRAM).
+- **GPU :** *Kronos nécessite un GPU dédié absent de l'infrastructure actuelle (Intel HD 520, i3 dual-core, pas de CUDA). Reporté à une amélioration matérielle future. Vérifier au moment de la reprise si la variante la plus légère de Kronos (le plus petit modèle disponible) tourne en inférence CPU pure en mode batch hors chemin critique — à ré-évaluer, ne pas supposer 'GPU obligatoire' sans nouvelle vérification, car cette conclusion date d'avant les contraintes machine actuelles.* Retiré de tout sprint actif tant que ce n'est pas réévalué.
 - **Risques :** Latence (ne peut pas tourner à chaque tick).
 - **Alternatives :** TimeGPT (Payant/SaaS - Refusé), ARIMA/GARCH (Trop statique).
 - **Tests :** Comparaison MAPE/RMSE vs baseline naïve.
@@ -129,6 +130,7 @@ Ce document détaille l'audit technique de chaque dépôt (actif et inspirationn
 ---
 
 ## 8. lightweight-charts (Niveau A - Frontend)
+- **Statut CTO :** Ni abandonné ni reporté — nécessaire, mais séquencé après la spécification du Dashboard (`DASHBOARD_FUNCTIONAL_SPECIFICATION.md`). Ne pas commencer l'intégration avant que le document de spécification du Dashboard soit validé.
 - **Pourquoi l'utiliser ?** Rendu de centaines de milliers de bougies à 60 FPS.
 - **Pourquoi ne pas le réécrire nous-mêmes ?** Recoder un moteur de rendu Canvas HTML5 optimisé pour la finance prendrait 1 an.
 - **Modules utilisés :** NPM `lightweight-charts`.
@@ -136,7 +138,7 @@ Ce document détaille l'audit technique de chaque dépôt (actif et inspirationn
 - **Architecture :** Canvas WebGL.
 - **Ce que nous gardons :** Tout le package NPM.
 - **Ce que nous supprimons :** Rien.
-- **Temps estimé :** Fait (Dans le Dashboard).
+- **Temps estimé :** En attente de validation spec.
 - **RAM :** Client-side (Browser).
 - **Risques :** Memory Leak JS si les séries ne sont pas nettoyées.
 - **Alternatives :** Highcharts (Payant), Chart.js (Trop lent).
@@ -144,15 +146,16 @@ Ce document détaille l'audit technique de chaque dépôt (actif et inspirationn
 ---
 
 ## 9. FinGPT (Niveau A - Reasoning)
+- **Statut CTO :** Abandonné pour raisonnement en temps réel, conservé uniquement comme option future pour le générateur de rapport macro asynchrone (AI-05 legacy). Le LLM local générique (Ollama) suffit pour ce rôle non-critique. (Pas de gain démontré vs Ollama générique pour un usage aussi limité, complexité d'intégration non justifiée).
 - **Pourquoi l'utiliser ?** Modèle NLP fine-tuné sur le vocabulaire financier.
 - **Pourquoi ne pas le réécrire nous-mêmes ?** Fine-tuner LLaMA sur des rapports financiers coûte des milliers de dollars en cloud.
 - **Modules utilisés :** HuggingFace Transformers, bitsandbytes (Quantization).
 - **Ce que nous gardons :** Le modèle GGML/GGUF pour exécution locale via `llama.cpp` dans l'adaptateur `OllamaReasoner` du Reasoning Engine (AI-03).
 - **Architecture :** Transformer LLM.
-- **Temps estimé :** 2 Semaines.
+- **Temps estimé :** N/A (Abandonné actif).
 - **RAM/GPU :** 8-16 GB VRAM.
 - **Risques :** Hallucination.
-- **Alternatives :** ChatGPT API (Refusé car Cloud), Llama-3-8B standard (Moins spécialisé).
+- **Alternatives :** Ollama (Générique, actuellement utilisé et suffisant).
 
 ---
 

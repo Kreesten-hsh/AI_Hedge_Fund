@@ -1,20 +1,27 @@
 # Phase 2 : Roadmap Détaillée et Stratégie de Validation
 
+> **Source de vérité pour le statut GO/NO-GO en conditions réelles : `VALIDATION_PIPELINE_REPORT.md`, jamais les cases à cocher de ce document seules.**
+
+**Légende des statuts :**
+- `[ ]` : À faire
+- `[CODE-READY]` : L'implémentation est terminée et testée unitairement, en attente de validation réelle.
+- `[x] VALIDATED` : Le cycle réel a tourné et le rapport affiche un verdict GO pour cette étape.
+
 Le développement de la Phase 2 est séquencé en 7 missions strictement interdépendantes, aboutissant sur un pipeline de validation de niveau institutionnel.
 
-## [x] AI-01 : Memory Engine
+## [x] VALIDATED AI-01 : Memory Engine
 **Objectif :** Poser les fondations de l'Experience Memory (FAISS, Embeddings).
 
-## AI-02 : Reflection Engine
+## [CODE-READY] AI-02 : Reflection Engine
 **Objectif :** Créer la boucle post-trade (Feature Engineering, Storage).
 
-## [x] AI-03 : Reasoning Engine
+## [CODE-READY] AI-03 : Reasoning Engine
 **Objectif :** Transformer les expériences de marché brutes de FAISS en règles métier exploitables, statistiques, versionnées et vérifiables.
 
-## [x] AI-04 : Reinforcement Learning
+## [CODE-READY] AI-04 : Reinforcement Learning
 **Objectif :** Intégrer FinRL/SB3 pour l'optimisation asynchrone (offline) des poids de décision du Conseil et de la taille de position, en s'appuyant sur la base de connaissances. N'intervient pas dans le chemin critique temps réel.
 
-## [x] AI-05 : Multi Agent Council
+## [CODE-READY] AI-05 : Multi Agent Council
 **Objectif :** Implémenter le comité de prise de décision (Trend, Momentum, Volatility, etc.) en utilisant le Reinforcement Learning et les règles validées par le Reasoning Engine.
 
 ---
@@ -30,15 +37,15 @@ Afin d'atteindre le statut d'OS Quantitatif professionnel, la validation suit un
 - **Objectif :** Tick-Replay (Simulation du temps réel).
 - **Méthode :** Rejeu d'une semaine historique à vitesse 100x pour tester la latence et la stabilité du code.
 
-### [x] 3. Paper Trading (AI-06a)
+### [CODE-READY] 3. Paper Trading (AI-06a)
 - **Objectif :** Exécution Live sans argent réel.
 - **Méthode :** Compte Demo. Validation de la connectivité Broker et accumulation d'expériences.
 
-### [x] 4. Shadow Trading (AI-06b)
+### [CODE-READY] 4. Shadow Trading (AI-06b)
 - **Objectif :** Vérification de Slippage.
 - **Méthode :** Le système tourne avec les données du compte Live, génère les signaux, les logge, mais *n'envoie pas* l'ordre au Broker. Comparaison des prix théoriques vs réels.
 
-### [x] 5. Micro Capital (AI-07a et AI-07b)
+### [CODE-READY] 5. Micro Capital (AI-07a et AI-07b)
 - **Objectif :** First Blood.
 - **Méthode :** Compte Live réel, mais capital limité à une fraction (50$). Lot minimum. But : Vérifier la gestion psychologique/technique des pertes réelles via un Gateway spécialisé (LiveDerivGateway) et une ségrégation du capital (CapitalAllocation).
 

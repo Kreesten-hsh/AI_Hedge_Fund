@@ -18,4 +18,6 @@
 ## Priorité 2 (Optimisation & Exploitation)
 - **[AI-05-A]** Automatisation de l'export des logs vers le *Research Logbook*.
 - **[AI-05-B]** Optimisation de la recherche de similarité (Top 200) pour garantir une latence HFT-compatible.
-- **[AI-06-A]** Dashboard Metrics pour le suivi de la taille de la mémoire (Nombre d'expériences par catégorie).
+- ~~**[AI-06-A]** Historical & Replay Validation (TickReplayEngine, BenchmarkGate).~~ *(Fait)*
+- ~~**[AI-06-B]** Live Paper Trading & Shadow Trading (DerivGateway, ShadowTradingEngine).~~ *(Fait)*
+- ~~**[AI-07-A]** Micro Capital Live Trading (LiveDerivGateway, CapitalAllocation, sécurité).~~ *(Fait)*

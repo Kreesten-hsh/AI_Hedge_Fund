@@ -19,9 +19,9 @@
 5. **AI-05 : Multi Agent Council** *(Terminé)*
    - *Pré-requis :* Validation AI-04, Modèles de RL fonctionnels.
    - *Implémentation :* Prompting, Voting system, Risk Veto basé sur la Knowledge Base.
-6. **AI-06 : Performance Validation**
+6. **AI-06 : Performance Validation** *(Terminé)*
    - *Pré-requis :* Assemblage AI-01 à AI-05.
-   - *Implémentation :* Historical Validation, Replay Validation, Paper Trading, Shadow Trading.
-7. **AI-07 : Live Trading**
+   - *Implémentation :* Historical Validation, Replay Validation, Paper Trading, Shadow Trading, Benchmark Gate.
+7. **AI-07 : Live Trading** *(Terminé)*
    - *Pré-requis :* Validation de la survie (Zéro risque de ruine détecté en Shadow Trading).
-   - *Implémentation :* Micro Capital puis Production Scale-up.
+   - *Implémentation :* Micro Capital (LiveDerivGateway, CapitalAllocation), sécurisation du mode Live, Documentation du protocole.

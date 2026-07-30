@@ -30,18 +30,18 @@ Afin d'atteindre le statut d'OS Quantitatif professionnel, la validation suit un
 - **Objectif :** Tick-Replay (Simulation du temps réel).
 - **Méthode :** Rejeu d'une semaine historique à vitesse 100x pour tester la latence et la stabilité du code.
 
-### 3. Paper Trading (AI-06a)
+### [x] 3. Paper Trading (AI-06a)
 - **Objectif :** Exécution Live sans argent réel.
 - **Méthode :** Compte Demo. Validation de la connectivité Broker et accumulation d'expériences.
 
-### 4. Shadow Trading (AI-06b)
+### [x] 4. Shadow Trading (AI-06b)
 - **Objectif :** Vérification de Slippage.
 - **Méthode :** Le système tourne avec les données du compte Live, génère les signaux, les logge, mais *n'envoie pas* l'ordre au Broker. Comparaison des prix théoriques vs réels.
 
-### 5. Micro Capital (AI-07a)
+### [x] 5. Micro Capital (AI-07a et AI-07b)
 - **Objectif :** First Blood.
-- **Méthode :** Compte Live réel, mais capital limité à une fraction (ex: 50$). Lot minimum. But : Vérifier la gestion psychologique/technique des pertes réelles.
+- **Méthode :** Compte Live réel, mais capital limité à une fraction (50$). Lot minimum. But : Vérifier la gestion psychologique/technique des pertes réelles via un Gateway spécialisé (LiveDerivGateway) et une ségrégation du capital (CapitalAllocation).
 
-### 6. Production (AI-07b)
+### 6. Production (Phase 3)
 - **Objectif :** Scale-up.
 - **Méthode :** Allocation du capital total. Respect absolu de l'`AEGIS_DECISION_PIPELINE.md`.

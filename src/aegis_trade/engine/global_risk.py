@@ -1,11 +1,12 @@
 from decimal import Decimal
-from typing import Dict, Tuple, TYPE_CHECKING
+from typing import Dict, Tuple, TYPE_CHECKING, Optional
 
 from aegis_trade.domain import Symbol
 from aegis_trade.engine.events import OrderEvent, OrderAction
 
 if TYPE_CHECKING:
     from aegis_trade.engine.portfolio import Portfolio
+from aegis_trade.domain.capital import CapitalAllocation
 
 class GlobalRiskManager:
     """
@@ -16,11 +17,13 @@ class GlobalRiskManager:
         self,
         max_gross_exposure: Decimal = Decimal("1.0"),
         max_drawdown: Decimal = Decimal("0.05"),
-        max_concentration: Decimal = Decimal("0.20")
+        max_concentration: Decimal = Decimal("0.20"),
+        capital_allocation: Optional[CapitalAllocation] = None
     ):
         self.max_gross_exposure = max_gross_exposure
         self.max_drawdown = max_drawdown
         self.max_concentration = max_concentration
+        self.capital_allocation = capital_allocation
 
     def validate_order(
         self,
@@ -34,6 +37,11 @@ class GlobalRiskManager:
         """
         if portfolio.equity <= 0:
             return False, "Portfolio equity is zero or negative."
+            
+        # If CapitalAllocation is used, ensure there is at least one active tier
+        if self.capital_allocation is not None:
+            if self.capital_allocation.get_total_active_equity() <= 0:
+                return False, "CapitalAllocation: All tiers are killed or zero equity."
             
         current_price = latest_prices.get(order.symbol)
         if current_price is None or current_price <= 0:

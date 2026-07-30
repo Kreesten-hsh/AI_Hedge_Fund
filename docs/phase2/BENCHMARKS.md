@@ -12,8 +12,9 @@ Aegis Quant OS est évalué selon un ensemble strict de métriques quantitatives
 
 ## 2. Métriques Opérationnelles et Techniques
 - **Latency (Tick-to-Trade)** : Temps d'exécution entre l'arrivée du tick, la recherche FAISS, et l'envoi de l'ordre. Objectif < 20 ms.
-- **Trades/hour** : Fréquence d'exécution (doit justifier une automatisation HFT).
+- **Trades/day** : Fréquence d'exécution (scalping modéré). Objectif : ~100 à 200 trades par jour pour garantir la consistance statistique sans forcer de gros leviers.
 - **Slippage moyen** : Écart entre le prix théorique et le prix exécuté. Objectif < 0.5 pip.
+- **Spread Cumulé (Coût de Transaction)** : Coût total payé en spread chaque jour. Doit rester strictement inférieur aux gains bruts sur la journée pour garantir la profitabilité nette.
 
 ## 3. Métriques Système (Observability)
 - **CPU Usage** : Objectif < 60% d'utilisation sur la machine hôte.

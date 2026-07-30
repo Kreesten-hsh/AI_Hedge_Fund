@@ -29,9 +29,9 @@ Catégorie: SUCCESS_MEMORY
 Pourquoi: (Commentaire auto-généré par le LLM post-trade)
 ```
 
-## Logs d'Expériences (En attente d'AI-05)
+## Logs d'Expériences (Phase Live / AI-07)
 
-*Les logs seront injectés ici automatiquement par le script d'audit post-trade.*
+*Les logs des 200 trades du cycle papier réel et du cycle capital réel (AI-07) seront injectés ici automatiquement.*
 
 ## Logs de Validation de Politique (Policy Promotion Gate)
 Trace des validations de politiques RL (AI-04).

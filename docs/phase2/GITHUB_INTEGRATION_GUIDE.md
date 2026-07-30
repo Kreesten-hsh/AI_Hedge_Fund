@@ -88,20 +88,20 @@ Ce document détaille l'audit technique de chaque dépôt (actif et inspirationn
 ---
 
 ## 5. Kronos (Niveau S - Forecasting)
-- **Statut CTO :** Reporté (PAUSED). L'inférence CPU est légère (< 300MB RAM), mais la boucle de fine-tuning offline nécessite des composants internes spécifiques d'Amazon Science (TimeSeriesPreprocessor) complexes à réimplémenter sans l'environnement d'origine.
-- **Pourquoi l'utiliser ?** Modèle LLM pré-entraîné pour le forecasting Zero-Shot sur séries temporelles.
-- **Pourquoi ne pas le réécrire nous-mêmes ?** Entraîner un LLM Time-Series demande un cluster de GPU H100 et des mois de compute.
-- **Modules utilisés :** Inférence locale.
-- **Classes :** `KronosForecaster` (wrapper à écrire).
-- **Fonctions :** `predict(horizon=N)`.
-- **Architecture :** Transformer.
-- **Ce que nous gardons :** Les poids pré-entraînés et le script d'inférence.
-- **Ce que nous supprimons :** Le pipeline d'entraînement distribué.
-- **Temps estimé :** Reporté (Hors chemin critique).
-- **RAM :** ~2-4 GB pour Kronos-mini.
-- **CPU :** Inférence CPU-only (batch asynchrone).
-- **GPU :** Aucun (utilisation stricte de Kronos-mini, 4.1M paramètres, conçu pour environnements contraints CPU).
-- **Risques :** Précision inférieure à la version base. À mesurer concrètement (MAPE/RMSE vs baseline naïve) avant de décider l'intégration complète.
+Status: **ACTIF** (Mode: Fine-tuning & Inférence sur CPU en tâche de fond)
+- **Pourquoi l'utiliser ?** Modèle LLM pré-entraîné (`shiyu-coder/Kronos`) pour le forecasting sur séries temporelles, conçu pour la finance (discrétisation OHLCV).
+- **Pourquoi ne pas le réécrire nous-mêmes ?** Architecture spécialisée, fine-tuning CPU réalisable grâce à la taille (4.1M params).
+- **Modules utilisés :** `aegis_trade.providers.kronos`.
+- **Classes :** `KronosAdapter`, `KronosModelFactory`, `KronosFineTuner`.
+- **Fonctions :** `adapter.get_latest_forecast()`.
+- **Architecture :** Transformer avec Hierarchical Embeddings et Dependency Aware Layers.
+- **Ce que nous gardons :** Tout le code officiel de `shiyu-coder/Kronos` dans `shiyu_model`.
+- **Ce que nous supprimons :** Rien, mais nous l'appelons via notre `KronosAdapter` asynchrone non-bloquant avec mise en cache.
+- **Temps estimé :** Sprint AI-08 (Actif).
+- **RAM :** ~800-900 MB max.
+- **CPU :** Inférence et fine-tuning CPU-only.
+- **GPU :** Aucun.
+- **Risques :** Modèle très sensible à la qualité des OHLCV. La non-régression est garantie par l'isolation du cache.
 - **Alternatives :** TimeGPT (Payant/SaaS - Refusé), ARIMA/GARCH (Trop statique).
 - **Tests :** Comparaison MAPE/RMSE vs baseline naïve.
 

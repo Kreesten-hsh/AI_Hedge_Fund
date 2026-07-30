@@ -5,7 +5,6 @@ import psutil
 import time
 import pandas as pd
 import numpy as np
-import torch
 
 # Adjust python path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
@@ -24,40 +23,58 @@ def generate_dummy_data(rows=5000):
     # generate random walk for price
     np.random.seed(42)
     returns = np.random.normal(0, 0.001, rows)
-    price = 1000 * np.exp(np.cumsum(returns))
-    return pd.DataFrame({'close': price})
+    close = 1000 * np.exp(np.cumsum(returns))
+    open_p = close * np.random.normal(1, 0.001, rows)
+    high = np.maximum(open_p, close) * np.random.normal(1.001, 0.001, rows)
+    low = np.minimum(open_p, close) * np.random.normal(0.999, 0.001, rows)
+    volume = np.random.lognormal(10, 1, rows)
+    amount = volume * close
+    
+    # Generate random timestamps
+    timestamps = pd.date_range(start='2020-01-01', periods=rows, freq='1min')
+    
+    return pd.DataFrame({
+        'open': open_p,
+        'high': high,
+        'low': low,
+        'close': close,
+        'volume': volume,
+        'amount': amount,
+        'datetime': timestamps
+    })
 
 def main():
-    logging.info("Starting Kronos-mini smoke test (Gold, 1 epoch)")
+    logging.info("Starting true Kronos-mini smoke test (Gold, 1 epoch)")
     
     mem_start = get_memory_usage()
     logging.info(f"Initial Memory Usage: {mem_start:.2f} MB")
     
     # 1. Load model
     factory = KronosModelFactory()
-    pipeline = factory.get_pipeline()
+    predictor = factory.get_predictor()
     
-    if pipeline is None:
-        logging.error("Failed to load Kronos pipeline. Make sure chronos is installed.")
+    if predictor is None:
+        logging.error("Failed to load true Kronos model.")
         return
         
     mem_after_load = get_memory_usage()
     logging.info(f"Memory after loading model: {mem_after_load:.2f} MB (Delta: {mem_after_load - mem_start:.2f} MB)")
     
     # 2. Prepare Data
-    logging.info("Generating dummy data for GOLD (since we don't have local csv)...")
-    df_gold = generate_dummy_data(105000)
+    # For a smoke test on a CPU, let's keep the row count small, e.g. 1000 rows
+    logging.info("Generating dummy data for GOLD...")
+    df_gold = generate_dummy_data(1000)
     
-    builder = KronosDatasetBuilder(context_length=2048)
+    builder = KronosDatasetBuilder(lookback_window=90, predict_window=10)
     train_data, val_data = builder.prepare_datasets({"GOLD": df_gold})
     
-    logging.info(f"Generated {len(train_data)} train windows and {len(val_data)} val windows.")
+    logging.info(f"Generated {len(train_data)} train samples and {len(val_data)} val samples.")
     
     mem_after_data = get_memory_usage()
     logging.info(f"Memory after data prep: {mem_after_data:.2f} MB")
     
     # 3. Fine-tune
-    trainer = KronosFineTuner(pipeline=pipeline, output_dir="./models/kronos_smoke")
+    trainer = KronosFineTuner(tokenizer=predictor.tokenizer, model=predictor.model, output_dir="./models/kronos_smoke")
     
     start_time = time.time()
     metrics = trainer.train(train_data, val_data, epochs=1)

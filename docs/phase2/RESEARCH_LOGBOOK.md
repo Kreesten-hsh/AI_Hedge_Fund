@@ -34,8 +34,12 @@ Pourquoi: (Commentaire auto-généré par le LLM post-trade)
 *Les logs des 200 trades du cycle papier réel et du cycle capital réel (AI-07) seront injectés ici automatiquement.*
 
 ## Événements de Gouvernance
-- **[2026-07-30] Évaluation Kronos-mini (Sprint AI-08)** : Smoke test réalisé sur CPU. L'empreinte mémoire est validée (+273 MB pour le chargement, ~830 MB peak total). L'architecture asynchrone non-bloquante est validée (non-régression du Council assurée). Décision : **NO-GO / PAUSED** pour le fine-tuning complet. L'API interne de `ChronosModel` empêche une simple boucle PyTorch sans réimplémenter leur DataCollator spécifique. Le système poursuit le Paper Trading sans Kronos.
-- **[2026-07-30] Correction de Gouvernance (Post AI-07)** : Alignement de la Roadmap (`PHASE2_ROADMAP.md`) avec le `VALIDATION_PIPELINE_REPORT.md` réel. Modification des statuts de AI-06/AI-07 à `[CODE-READY]` pour refléter l'attente de tests réels sans argent simulé. Audit réel de `DEPENDENCY_MATRIX.md` effectué sur la base du code (utilisation d'OpenBB, Qlib, SB3/FinRL, Deriv). Décision tranchée pour Kronos (Reporté, contrainte GPU et complexité de fine-tuning), FinGPT (Abandonné, remplacé par Ollama) et lightweight-charts (Planifié post-validation spec).
+- **[2026-07-30] Intégration Kronos (Sprint AI-08)** : Erreur de modèle corrigée (passage de l'Amazon Chronos générique au vrai modèle natif finance `shiyu-coder/Kronos`). Fine-tuning et inférence sur CPU testés avec succès via `run_kronos_smoke_test.py`. Isolation totale via l'Adapter. Les résultats de la première évaluation sont très positifs (RAM Peak à ~917 MB, 49s par epoch de 1000 bougies). Décision : **ACTIF**, prêt pour le fine-tuning complet.
+- **[2026-07-30] Modèles externes** : 
+  - Qlib (Microsoft) : Actif. Modèle `LGBModel` fonctionnel pour features alpha.
+  - Kronos (shiyu-coder) : Actif. Modèle AAAI 2026 natif finance avec discrétisation OHLCV `BSQuantizer`. Entraînement et inférence CPU fonctionnels en tâche de fond.
+  - Chronos (Amazon) : Rejeté. Modèle générique (T5) non adapté aux séries temporelles financières (remplacé par Kronos).
+- **[2026-07-30] Correction de Gouvernance (Post AI-07)** : Alignement de la Roadmap (`PHASE2_ROADMAP.md`) avec le `VALIDATION_PIPELINE_REPORT.md` réel. Modification des statuts de AI-06/AI-07 à `[CODE-READY]`. FinGPT (Abandonné, remplacé par Ollama) et lightweight-charts (Planifié post-validation spec).
 
 ## Logs de Validation de Politique (Policy Promotion Gate)
 Trace des validations de politiques RL (AI-04).

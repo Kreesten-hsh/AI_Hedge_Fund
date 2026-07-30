@@ -12,30 +12,29 @@ def test_build_from_dataframe_windows():
     
     df = pd.DataFrame({
         "close": np.random.rand(total_rows)
-    })
+    }, index=pd.date_range(start='2020-01-01', periods=total_rows, freq='1min'))
     
-    builder = KronosDatasetBuilder(context_length=context_length)
+    builder = KronosDatasetBuilder(lookback_window=context_length)
     
     try:
         import torch
-        windows = builder.build_from_dataframe(df)
+        windows, windows_stamp = builder.build_from_dataframe(df)
         
-        assert len(windows) == 2 # (0 to 2048), (1024 to 3072)
-        assert len(windows[0]) == context_length
-        assert len(windows[1]) == context_length
-        assert isinstance(windows[0], torch.Tensor)
+        assert len(windows) > 0
+        assert len(windows[0]) == builder.window_size
+        assert isinstance(windows[0], np.ndarray)
     except ImportError:
-        pass # Skip if torch not installed
+        pass
 
 def test_prepare_datasets_split():
     context_length = 2048
     stride = context_length // 2
     total_rows = context_length * 5 # Enough for several windows
     
-    df1 = pd.DataFrame({"close": np.random.rand(total_rows)})
-    df2 = pd.DataFrame({"close": np.random.rand(total_rows)})
+    df1 = pd.DataFrame({"close": np.random.rand(total_rows)}, index=pd.date_range(start='2020-01-01', periods=total_rows, freq='1min'))
+    df2 = pd.DataFrame({"close": np.random.rand(total_rows)}, index=pd.date_range(start='2020-01-01', periods=total_rows, freq='1min'))
     
-    builder = KronosDatasetBuilder(context_length=context_length)
+    builder = KronosDatasetBuilder(lookback_window=context_length)
     
     try:
         import torch

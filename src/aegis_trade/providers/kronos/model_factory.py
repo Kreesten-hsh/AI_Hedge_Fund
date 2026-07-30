@@ -1,43 +1,53 @@
 import os
 import logging
-from typing import Optional, Any
+from typing import Optional, Any, Tuple
 import torch
+from .shiyu_model.kronos import KronosTokenizer, Kronos, KronosPredictor
 
 logger = logging.getLogger(__name__)
 
 class KronosModelFactory:
     """
-    Factory for loading the Kronos-mini model.
+    Factory for loading the true Kronos model from shiyu-coder.
     Downloads from HuggingFace and manages local cache.
     """
-    MODEL_NAME = "amazon/chronos-t5-mini"
+    TOKENIZER_NAME = "NeoQuasar/Kronos-Tokenizer-base"
+    MODEL_NAME = "NeoQuasar/Kronos-mini"
     
     def __init__(self, cache_dir: str = "~/.cache/huggingface/hub"):
         self.cache_dir = os.path.expanduser(cache_dir)
-        self.device = torch.device("cpu") # CPU only as per spec
-        self._pipeline = None
+        self.device = "cpu" # CPU only as per spec
+        self._predictor = None
 
-    def get_pipeline(self) -> Any:
+    def get_predictor(self) -> Optional[KronosPredictor]:
         """
-        Loads and returns the ChronosPipeline.
+        Loads and returns the KronosPredictor instance.
         Returns None if loading fails to prevent crashing the system.
         """
-        if self._pipeline is not None:
-            return self._pipeline
+        if self._predictor is not None:
+            return self._predictor
             
         try:
-            from chronos import ChronosPipeline
-            logger.info(f"Loading {self.MODEL_NAME} to {self.device}...")
-            self._pipeline = ChronosPipeline.from_pretrained(
-                self.MODEL_NAME,
-                device_map=self.device,
-                torch_dtype=torch.float32,
+            logger.info(f"Loading tokenizer {self.TOKENIZER_NAME} to {self.device}...")
+            tokenizer = KronosTokenizer.from_pretrained(self.TOKENIZER_NAME).to(self.device)
+            
+            logger.info(f"Loading model {self.MODEL_NAME} to {self.device}...")
+            model = Kronos.from_pretrained(self.MODEL_NAME).to(self.device)
+            
+            # Put models in eval mode
+            tokenizer.eval()
+            model.eval()
+            
+            self._predictor = KronosPredictor(
+                model=model,
+                tokenizer=tokenizer,
+                device=self.device,
+                max_context=512,
+                clip=5
             )
+            
             logger.info("Kronos-mini loaded successfully.")
-            return self._pipeline
-        except ImportError:
-            logger.error("chronos package is not installed. Run 'pip install chronos'.")
-            return None
+            return self._predictor
         except Exception as e:
             logger.error(f"Failed to load Kronos model: {e}")
             return None

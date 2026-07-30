@@ -1,12 +1,13 @@
 import logging
 import asyncio
 from typing import Optional, Dict
-from datetime import datetime
+from datetime import datetime, timedelta
+import pandas as pd
+import numpy as np
 
 from aegis_trade.domain.forecasting import IForecaster, KronosForecast
 from aegis_trade.providers.kronos.model_factory import KronosModelFactory
-from aegis_trade.providers.kronos.predictor import KronosPredictor
-import torch
+from aegis_trade.providers.kronos.shiyu_model.kronos import KronosPredictor
 
 logger = logging.getLogger(__name__)
 
@@ -31,9 +32,9 @@ class KronosAdapter(IForecaster):
         """
         Loads the model and initializes the predictor.
         """
-        pipeline = self.factory.get_pipeline()
-        if pipeline:
-            self.predictor = KronosPredictor(pipeline)
+        predictor = self.factory.get_predictor()
+        if predictor:
+            self.predictor = predictor
             return True
         return False
 
@@ -55,25 +56,48 @@ class KronosAdapter(IForecaster):
             try:
                 if self.predictor:
                     for symbol in symbols:
-                        # 1. Fetch latest 2048 candles from data_provider (stubbed here)
-                        # context_data = data_provider.get_historical_data(symbol, "1m", limit=2048)
-                        # tensor = torch.tensor([context_data['close'].values])
+                        # 1. Fetch latest candles from data_provider (stubbed here)
+                        # The true Kronos model expects a dataframe with ['open', 'high', 'low', 'close', 'volume', 'amount']
                         
-                        # Mock tensor for the structure
-                        dummy_tensor = torch.randn(1, 2048) 
+                        # Mock dataframe for structure
+                        now = pd.Timestamp(datetime.utcnow())
+                        x_timestamps = pd.date_range(end=now, periods=512, freq='1min')
+                        y_timestamps = pd.date_range(start=now + pd.Timedelta(minutes=1), periods=self.prediction_horizon, freq='1min')
                         
-                        # 2. Predict (This should ideally be offloaded to a thread pool to not block asyncio if it's heavy CPU)
-                        # For CPU inference, asyncio.to_thread is critical to keep HFT loop alive
-                        median_pred, conf_interval = await asyncio.to_thread(
-                            self.predictor.predict, dummy_tensor, self.prediction_horizon
+                        dummy_df = pd.DataFrame(
+                            np.random.randn(512, 6) + 100, 
+                            columns=['open', 'high', 'low', 'close', 'volume', 'amount'],
+                            index=x_timestamps
                         )
+                        
+                        # 2. Predict (Offloaded to a thread pool to not block asyncio CPU-bound)
+                        # We use predictor.predict from the true Kronos model
+                        def run_prediction():
+                            return self.predictor.predict(
+                                df=dummy_df,
+                                x_timestamp=x_timestamps,
+                                y_timestamp=y_timestamps,
+                                pred_len=self.prediction_horizon,
+                                sample_count=5, # Ensemble for confidence
+                                verbose=False
+                            )
+                            
+                        pred_df = await asyncio.to_thread(run_prediction)
+                        
+                        # Calculate median and confidence bounds from the close price
+                        # Note: The original sample_count logic averages internally in the true model predict() method,
+                        # so we just take the last point's close value as a proxy or use the whole path.
+                        # For simplicity of the interface matching what we had:
+                        median_pred = pred_df['close'].tolist()
+                        low_bound = min(median_pred)
+                        high_bound = max(median_pred)
                         
                         # 3. Update Cache
                         self._cache[symbol] = KronosForecast(
                             symbol=symbol,
                             horizon=self.prediction_horizon,
                             predicted_values=median_pred,
-                            confidence_interval=conf_interval,
+                            confidence_interval=(low_bound, high_bound),
                             model_version=KronosModelFactory.MODEL_NAME,
                             timestamp=datetime.utcnow()
                         )

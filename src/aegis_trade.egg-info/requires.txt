@@ -16,6 +16,7 @@ gymnasium>=0.29.0
 stable-baselines3>=2.0.0
 torch>=2.0.0
 finrl>=0.3.6
+einops>=0.8.2
 
 [dev]
 pytest

@@ -21,6 +21,7 @@ Requires-Dist: gymnasium>=0.29.0
 Requires-Dist: stable-baselines3>=2.0.0
 Requires-Dist: torch>=2.0.0
 Requires-Dist: finrl>=0.3.6
+Requires-Dist: einops>=0.8.2
 Provides-Extra: dev
 Requires-Dist: pytest; extra == "dev"
 Requires-Dist: pytest-cov; extra == "dev"

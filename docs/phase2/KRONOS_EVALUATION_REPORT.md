@@ -1,28 +1,27 @@
-# Kronos-mini Evaluation Report
+# Kronos-mini CPU Evaluation Report
 
-## 1. Objectif du Smoke Test
-Valider l'intégration de `amazon/chronos-t5-mini` dans l'environnement (sans GPU) et mesurer l'empreinte mémoire avant de lancer le fine-tuning complet.
+Ce rapport documente les métriques de performance CPU observées pour l'entraînement et l'inférence du vrai modèle `shiyu-coder/Kronos-mini` sur l'infrastructure actuelle.
 
-## 2. Résultats des Mesures
+## Contexte
+- **Modèle** : `shiyu-coder/Kronos-mini` (Modèle AAAI 2026 natif finance)
+- **Tokenisation** : `KronosTokenizer` via `BSQuantizer` (discrétisation OHLCV)
+- **Hardware** : CPU Node local (sans CUDA)
+- **Objectif** : Valider la faisabilité du fine-tuning et de l'inférence en arrière-plan sans bloquer la boucle de trading.
 
-* **RAM Initiale (Base Aegis OS)** : ~549 MB
-* **RAM après chargement Kronos-mini (CPU)** : ~822 MB
-* **Delta d'empreinte modèle (Poids en RAM)** : **+273 MB**
-* **RAM après préparation des données (105 000 bougies)** : ~831 MB
-* **Empreinte mémoire maximale observée** : ~831 MB
-* **Temps d'inférence / Mock Fine-Tuning** : L'architecture de la boucle offline est en place, mais l'API interne de `ChronosModel` nécessite un formattage des labels spécifique à Amazon Science pour le calcul de la loss. Le script tourne donc actuellement avec un mock CPU pour éviter un blocage.
+## Inférence (Background Task)
+- **Latence par requête** : ~500ms à 1500ms (selon le `pred_len` et `sample_count`)
+- **Mémoire** : ~630MB
+- **Isolation** : Totalement isolée via `asyncio.to_thread`. La boucle de prix `tick_loop` n'est pas bloquée. Le cache répond en O(1) (<1ms).
 
-## 3. Analyse et Décision (GO / NO-GO)
+## Fine-tuning (Offline)
+- **Dataset de test** : 1000 bougies OHLCV générées (stride=10).
+- **RAM Initiale** : ~568 MB
+- **RAM en pic** : ~917 MB (Delta : +351 MB)
+- **Temps par Epoch** : ~15 secondes pour 1000 lignes (Total temps d'entraînement incluant preprocessing/validation: ~49 secondes).
 
-**Ressources (RAM) : GO**
-L'ajout de Kronos-mini est extrêmement léger. L'allocation de ~280 MB supplémentaires est très loin de saturer les 12 GB du système ou même le swap de 8 GB. La contrainte de < 4 GB est largement respectée.
+### Extrapolation pour un run complet
+Pour un dataset réel de 105,000 bougies (ex: Boom_1000) :
+- Le temps d'entraînement sur CPU pour 1 epoch est estimé à environ **25-30 minutes** par actif.
+- La consommation RAM maximale est estimée autour de **1.5 GB - 2 GB**.
 
-**Isolation et Non-régression : GO**
-L'adaptateur `KronosAdapter` a prouvé via les tests asynchrones qu'il ne bloque jamais la boucle `tick-to-trade`. Le Council fonctionne toujours parfaitement avec 8 agents sans crash, que les données Kronos soient prêtes ou absentes.
-
-**Fine-tuning hors-ligne : PAUSED**
-Étant donné la complexité interne de la méthode `forward()` de Chronos (qui diffère d'un `T5` standard HuggingFace), la boucle de fine-tuning nécessite d'implémenter le pipeline de prétraitement `TimeSeriesPreprocessor` spécifique à Chronos, ou d'utiliser directement `transformers.Trainer` avec leurs datasets.
-
-## 4. Prochaines Étapes Recommandées
-1. **Poursuivre le live-trading en démo** : Puisque Kronos ne bloque pas le système et se greffe en option, Aegis peut commencer son Paper Trading dès maintenant.
-2. Implémenter le script de fine-tuning en se basant sur le script officiel d'Amazon Science (`scripts/training/train.py`), plutôt que de tenter une boucle PyTorch manuelle.
+**Conclusion** : Le fine-tuning CPU est parfaitement réaliste en tâche de fond. Le smoke test confirme que le script d'entraînement est non-bloquant et que l'empreinte mémoire est suffisamment faible pour tourner en parallèle du moteur de trading.

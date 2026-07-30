@@ -24,9 +24,9 @@ class TradeRecord:
     volume: Decimal
     realized_pnl_amount: Decimal
     realized_pnl_percent: Decimal
-    spread: Decimal = Decimal(0)
     open_timestamp: datetime
     close_timestamp: datetime
     duration_seconds: float
+    spread: Decimal = Decimal(0)
     triggering_council_verdict_id: Optional[str] = None
     mode: TradeMode = TradeMode.PAPER

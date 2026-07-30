@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { useMonitoringStore } from './store/monitoringStore';
 import { useAegisWebSocket } from './api/websocket';
-import { 
-  Activity, Briefcase, ShieldAlert, BarChart3, Skull, Server, Play, 
-  Square, Power, Settings2, LayoutDashboard, LineChart, Cpu, BookOpen, Shield, Database, List, X
-} from 'lucide-react';
+import { Activity, Play, Square, Settings, ShieldAlert, LineChart, Brain, Cpu, BookOpen, ShieldCheck, Briefcase, BarChart3, Skull, Server, LayoutDashboard, List, X } from 'lucide-react';
+import { ValidationTab } from './components/tabs/ValidationTab';
+import { CapitalTab } from './components/tabs/CapitalTab';
+import { CouncilTab } from './components/tabs/CouncilTab';
+import { KnowledgeTab } from './components/tabs/KnowledgeTab';
 import { createChart, ColorType, AreaSeries } from 'lightweight-charts';
 import type { UTCTimestamp } from 'lightweight-charts';
 
@@ -194,8 +195,8 @@ function App() {
         { id: 'performance', label: 'Performance', icon: LineChart },
         { id: 'council', label: 'Council', icon: Cpu },
         { id: 'knowledge', label: 'Knowledge', icon: BookOpen },
-        { id: 'risk', label: 'Risque & Capital', icon: Shield },
-        { id: 'data', label: 'Données & Validation', icon: Database },
+        { id: 'risk', label: 'Risque & Capital', icon: ShieldCheck },
+        { id: 'data', label: 'Données & Validation', icon: Brain },
         { id: 'journal', label: 'Journal', icon: List },
       ].map(tab => (
         <button
@@ -243,11 +244,11 @@ function App() {
       {/* TRADING TAB */}
       {activeTab === 'trading' && (
         <div className="flex flex-col gap-6 flex-1">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="grid grid-grid-cols-1 md:grid-cols-4 gap-6">
             {/* Strategy Control */}
             <div className="bg-card p-6 rounded-lg border border-gray-800 shadow-xl">
               <h2 className="text-gray-400 text-sm font-semibold mb-4 flex items-center gap-2">
-                <Settings2 size={16} /> STRATEGY CONTROL
+                <Settings size={16} /> STRATEGY CONTROL
               </h2>
               <div className="flex justify-between items-center mb-4">
                 <span className="text-sm">ID:</span>
@@ -270,7 +271,7 @@ function App() {
             {/* Broker Status */}
             <div className="bg-card p-6 rounded-lg border border-gray-800 shadow-xl">
               <h2 className="text-gray-400 text-sm font-semibold mb-4 flex items-center gap-2">
-                <Power size={16} /> BROKER STATUS
+                <Server size={16} /> BROKER STATUS
               </h2>
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
@@ -477,14 +478,10 @@ function App() {
         </div>
       )}
       
-      {/* PLACEHOLDERS FOR PENDING TABS */}
-      {['council', 'knowledge', 'risk', 'data'].includes(activeTab) && (
-         <div className="bg-card p-12 rounded-lg border border-gray-800 shadow-xl flex-1 flex items-center justify-center flex-col gap-4 text-gray-500">
-           <Settings2 size={48} className="animate-spin-slow opacity-20" />
-           <p>Ce module (Phase B) nécessitera de nouveaux routeurs backend.</p>
-           <p className="text-xs">Statut actuel : En attente d'implémentation backend.</p>
-         </div>
-      )}
+      {activeTab === 'data' && <ValidationTab />}
+      {activeTab === 'risk' && <CapitalTab />}
+      {activeTab === 'council' && <CouncilTab />}
+      {activeTab === 'knowledge' && <KnowledgeTab />}
 
     </div>
   )

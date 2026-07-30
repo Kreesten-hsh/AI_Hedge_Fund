@@ -4,6 +4,7 @@ interface PortfolioSnapshot {
   equity: number;
   cash: number;
   total_unrealized_pnl: number;
+  total_realized_pnl: number;
   open_positions_count: number;
 }
 
@@ -27,6 +28,7 @@ interface StrategySnapshot {
 }
 
 interface SystemSnapshot {
+  current_mode: string;
   cpu_usage: number;
   memory_usage: number;
   active_services: string[];

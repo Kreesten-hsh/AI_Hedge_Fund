@@ -13,6 +13,7 @@ from aegis_trade.application.monitoring.models import (
 )
 from aegis_trade.domain.trade_record import TradeRecord, TradeMode
 import uuid
+import os
 
 class MonitoringEngine:
     def __init__(self):
@@ -50,6 +51,7 @@ class MonitoringEngine:
         )
         self.system = SystemSnapshot(
             timestamp=now, 
+            current_mode="LIVE" if os.environ.get("AEGIS_ENV", "").upper() == "LIVE" else "PAPER",
             cpu_usage=0.0, 
             memory_usage=0.0, 
             disk_usage=0.0, 

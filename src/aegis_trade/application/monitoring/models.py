@@ -39,6 +39,7 @@ class StrategySnapshot(BaseModel):
 
 class SystemSnapshot(BaseModel):
     timestamp: datetime
+    current_mode: str
     cpu_usage: float
     memory_usage: float
     disk_usage: float

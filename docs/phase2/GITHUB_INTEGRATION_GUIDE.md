@@ -88,7 +88,7 @@ Ce document détaille l'audit technique de chaque dépôt (actif et inspirationn
 ---
 
 ## 5. Kronos (Niveau S - Forecasting)
-- **Statut CTO :** Reporté (pas abandonné).
+- **Statut CTO :** En évaluation — variante mini uniquement, CPU.
 - **Pourquoi l'utiliser ?** Modèle LLM pré-entraîné pour le forecasting Zero-Shot sur séries temporelles.
 - **Pourquoi ne pas le réécrire nous-mêmes ?** Entraîner un LLM Time-Series demande un cluster de GPU H100 et des mois de compute.
 - **Modules utilisés :** Inférence locale.
@@ -97,11 +97,11 @@ Ce document détaille l'audit technique de chaque dépôt (actif et inspirationn
 - **Architecture :** Transformer.
 - **Ce que nous gardons :** Les poids pré-entraînés et le script d'inférence.
 - **Ce que nous supprimons :** Le pipeline d'entraînement distribué.
-- **Temps estimé :** Reporté.
-- **RAM :** 8 GB.
-- **CPU :** Élevé.
-- **GPU :** *Kronos nécessite un GPU dédié absent de l'infrastructure actuelle (Intel HD 520, i3 dual-core, pas de CUDA). Reporté à une amélioration matérielle future. Vérifier au moment de la reprise si la variante la plus légère de Kronos (le plus petit modèle disponible) tourne en inférence CPU pure en mode batch hors chemin critique — à ré-évaluer, ne pas supposer 'GPU obligatoire' sans nouvelle vérification, car cette conclusion date d'avant les contraintes machine actuelles.* Retiré de tout sprint actif tant que ce n'est pas réévalué.
-- **Risques :** Latence (ne peut pas tourner à chaque tick).
+- **Temps estimé :** En évaluation (Hors chemin critique).
+- **RAM :** ~2-4 GB pour Kronos-mini.
+- **CPU :** Inférence CPU-only (batch asynchrone).
+- **GPU :** Aucun (utilisation stricte de Kronos-mini, 4.1M paramètres, conçu pour environnements contraints CPU).
+- **Risques :** Précision inférieure à la version base. À mesurer concrètement (MAPE/RMSE vs baseline naïve) avant de décider l'intégration complète.
 - **Alternatives :** TimeGPT (Payant/SaaS - Refusé), ARIMA/GARCH (Trop statique).
 - **Tests :** Comparaison MAPE/RMSE vs baseline naïve.
 

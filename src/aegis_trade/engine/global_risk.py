@@ -24,6 +24,28 @@ class GlobalRiskManager:
         self.max_drawdown = max_drawdown
         self.max_concentration = max_concentration
         self.capital_allocation = capital_allocation
+        self._emergency_halt_active = False
+
+    async def emergency_halt(self, gateway: 'IPaperBroker' = None) -> dict:
+        """
+        Activates the Kill Switch.
+        Blocks all future orders, cancels pending orders, and closes open positions.
+        """
+        self._emergency_halt_active = True
+        result = {"status": "HALTED", "orders_cancelled": 0, "positions_closed": 0}
+        
+        if gateway:
+            try:
+                result["orders_cancelled"] = await gateway.cancel_all_orders()
+            except Exception as e:
+                result["cancel_error"] = str(e)
+                
+            try:
+                result["positions_closed"] = await gateway.close_all_positions()
+            except Exception as e:
+                result["close_error"] = str(e)
+                
+        return result
 
     def validate_order(
         self,
@@ -35,6 +57,9 @@ class GlobalRiskManager:
         Validates if an order complies with the global risk limits.
         Returns a tuple (is_approved, rejection_reason).
         """
+        if self._emergency_halt_active:
+            return False, "Kill Switch is active. System halted."
+            
         if portfolio.equity <= 0:
             return False, "Portfolio equity is zero or negative."
             

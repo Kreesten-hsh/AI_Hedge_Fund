@@ -11,6 +11,8 @@ from aegis_trade.application.monitoring.models import (
     PortfolioSnapshot, PositionSnapshot, RiskSnapshot, SystemSnapshot,
     PerformanceSnapshot, PaperTradingSnapshot, BrokerSnapshot, StrategySnapshot
 )
+from aegis_trade.domain.trade_record import TradeRecord, TradeMode
+import uuid
 
 class MonitoringEngine:
     def __init__(self):
@@ -23,6 +25,7 @@ class MonitoringEngine:
         
         # State
         self.positions: Dict[str, PositionSnapshot] = {}
+        self.trades: List[TradeRecord] = []
         
         # Historical Data (In-Memory for now, could be backed by SQLite later)
         self.history_1m: List[PortfolioSnapshot] = []
@@ -103,7 +106,25 @@ class MonitoringEngine:
                 )
             elif ev.action == "closed":
                 if symbol_name in self.positions:
+                    pos = self.positions[symbol_name]
+                    # Create a TradeRecord based on the position that just closed
+                    trade = TradeRecord(
+                        trade_id=f"TRD-{uuid.uuid4().hex[:8]}",
+                        symbol=ev.symbol,
+                        side=pos.side,
+                        entry_price=pos.entry_price,
+                        exit_price=ev.average_price,
+                        volume=pos.quantity,
+                        realized_pnl_amount=Decimal(0), # Calculate actual later if possible
+                        realized_pnl_percent=Decimal(0),
+                        open_timestamp=now, # We don't have open time in PositionSnapshot, use now as fallback
+                        close_timestamp=now,
+                        duration_seconds=0.0
+                    )
+                    self.trades.append(trade)
                     del self.positions[symbol_name]
+                    updated_topics.append(("trades", trade)) # Broadcast new trade
+
             
             self.portfolio.open_positions_count = len(self.positions)
             self.portfolio.timestamp = now
@@ -117,3 +138,6 @@ class MonitoringEngine:
 
     def get_portfolio_snapshot(self) -> PortfolioSnapshot:
         return self.portfolio
+
+    def get_trades(self) -> List[TradeRecord]:
+        return self.trades

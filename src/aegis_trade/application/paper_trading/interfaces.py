@@ -44,6 +44,16 @@ class IPaperBroker(abc.ABC):
         """Cancel an active order."""
         pass
 
+    @abc.abstractmethod
+    async def cancel_all_orders(self) -> int:
+        """Cancel all active orders. Returns the number of cancelled orders."""
+        pass
+
+    @abc.abstractmethod
+    async def close_all_positions(self) -> int:
+        """Close all open positions at market price. Returns the number of closed positions."""
+        pass
+
 
 class IMarketFeed(abc.ABC):
     @abc.abstractmethod

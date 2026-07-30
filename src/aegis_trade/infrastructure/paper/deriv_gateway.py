@@ -142,6 +142,18 @@ class DerivGateway(IPaperBroker):
                 return False
         return True
 
+    async def cancel_all_orders(self) -> int:
+        """Mock cancellation of all orders."""
+        logger.warning("DerivGateway: Cancelling all active orders.")
+        # In a real scenario, fetch all open orders and cancel them one by one or via bulk API
+        return 0
+
+    async def close_all_positions(self) -> int:
+        """Mock closing of all open positions."""
+        logger.warning("DerivGateway: Closing all open positions at market price.")
+        # In a real scenario, fetch all open positions and submit opposite market orders
+        return 0
+
 class LiveDerivGateway(DerivGateway):
     """
     Gateway to Deriv API for Real Money Live Trading.

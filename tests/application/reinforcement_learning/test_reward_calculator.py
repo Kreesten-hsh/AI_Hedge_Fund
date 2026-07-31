@@ -3,7 +3,7 @@ Tests for RL Reward Calculator.
 """
 
 import pytest
-from src.aegis_trade.application.reinforcement_learning.reward_calculator import RewardCalculator
+from aegis_trade.application.reinforcement_learning.reward_calculator import RewardCalculator
 
 
 def test_reward_penalizes_risky_small_win():

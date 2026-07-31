@@ -33,7 +33,8 @@ dependencies = [
 dev = [
     "pytest",
     "pytest-cov",
-    "pytest-mock"
+    "pytest-mock",
+    "pytest-asyncio>=1.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -48,9 +49,13 @@ python_version = "3.11"
 strict = true
 warn_unreachable = true
 show_error_codes = true
+mypy_path = "src"
+explicit_package_bases = true
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
 
 [dependency-groups]
 dev = [

@@ -3,8 +3,8 @@ Tests for Policy Trainer.
 """
 
 from unittest.mock import MagicMock
-from src.aegis_trade.application.reinforcement_learning.policy_trainer import PolicyTrainer
-from src.aegis_trade.domain.rl import ITrainingEnvironment, IPolicyStore
+from aegis_trade.application.reinforcement_learning.policy_trainer import PolicyTrainer
+from aegis_trade.domain.rl import ITrainingEnvironment, IPolicyStore
 
 
 def test_policy_trainer_orchestration():

@@ -3,7 +3,7 @@ Reward Calculator for RL Engine (AI-04).
 Implements the specific reward function required by Aegis Quant OS.
 """
 
-from src.aegis_trade.domain.rl import RewardComponents
+from aegis_trade.domain.rl import RewardComponents
 import math
 
 

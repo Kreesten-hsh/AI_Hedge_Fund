@@ -3,7 +3,7 @@ Policy Trainer. Orchestrates the asynchronous, offline batch learning process.
 """
 
 from typing import List, Dict, Any
-from src.aegis_trade.domain.rl import ITrainingEnvironment, IPolicyStore
+from aegis_trade.domain.rl import ITrainingEnvironment, IPolicyStore
 
 
 class PolicyTrainer:

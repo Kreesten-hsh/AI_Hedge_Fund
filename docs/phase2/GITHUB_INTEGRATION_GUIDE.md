@@ -2,6 +2,17 @@
 
 Ce document détaille l'audit technique de chaque dépôt (actif et inspirationnel) pour l'intégration dans Aegis Quant OS. 
 
+> **Annoté le 2026-07-31** sur la base de `docs/refont/AUDIT_COMPLET_2026-07-31.md` (verdict **NO-GO**).
+>
+> **Nature de ce document, à ne pas confondre :** il consigne des **décisions d'intégration** — pourquoi tel
+> dépôt, ce qu'on en garde, ce qu'on en jette. À ce titre il reste valable et n'est pas réécrit.
+> Il ne dit **rien** de l'état réel du câblage. Les « Statut CTO » sont des intentions, pas des mesures.
+>
+> **Pour l'état mesuré du code, la source est `DEPENDENCY_MATRIX.md`**, qui distingue `[ÉCRIT-NON-CÂBLÉ]`,
+> `[CÂBLÉ-NON-VALIDÉ]`, `[FAÇADE]`, `[VENDORÉ]` et `[INSPIRATION]`. Rappel des trois écarts les plus lourds :
+> aucun abonnement WebSocket de prix n'existe dans le dépôt ; Kronos est vendoré (1 532 lignes, **sans
+> LICENSE**) et prédit sur `np.random.randn` ; la production injecte `MockReasoner()` (`api/deps.py:53`).
+
 ---
 
 ### `vnpy`
@@ -12,7 +23,13 @@ Ce document détaille l'audit technique de chaque dépôt (actif et inspirationn
 **Rôle :** Calcul des indicateurs techniques (RSI, MACD, ATR, EMA, VWAP).
 **Justification :** Requis par `FEATURE_ENGINEERING.md`. Fournit des calculs d'indicateurs vectorisés ultra-rapides sans réinventer la roue, crucial pour maintenir la latence < 20 ms lors de la génération des Market Snapshots en direct.
 
-## 4. Workflows GitHub Actionses et connectivité MT5/FIX.
+## 1. vn.py (Niveau S - Execution)
+
+> **Correctif de forme (2026-07-31) :** ce titre était corrompu — il lisait
+> `## 4. Workflows GitHub Actionses et connectivité MT5/FIX.`, un fragment épissé au milieu de la section
+> `vnpy`, et le numéro `4.` était en doublon avec la section FinRL. Le contenu ci-dessous a toujours porté
+> sur la passerelle vn.py ; seul l'intitulé est réparé. Aucune décision n'est modifiée.
+
 - **Pourquoi ne pas le réécrire nous-mêmes ?** Refaire un connecteur MT5 asynchrone robuste en C++ prendrait 6 mois de R&D avec des risques de perte de paquets, ce qui est mortel en HFT.
 - **Modules utilisés :** `vnpy.event`, `vnpy.gateway.mt5`, `vnpy.trader.object`.
 - **Classes :** `EventEngine`, `Mt5Gateway`, `OrderRequest`, `TickData`.
@@ -21,6 +38,11 @@ Ce document détaille l'audit technique de chaque dépôt (actif et inspirationn
 - **Ce que nous gardons :** Uniquement le pont de communication réseau (Le Gateway) et les Data Objects.
 - **Ce que nous supprimons :** Toute l'interface graphique (`vnpy.ui`), les modules de backtest (`vnpy.app.cta_strategy`), l'ORM base de données.
 - **Temps estimé (Intégration) :** 1 Sprint (Fait).
+- **Correctif de statut (2026-07-31) :** « (Fait) » est faux au sens du câblage. La passerelle route des
+  ordres, mais `on_trade` a pour corps `pass` (`infrastructure/live/vnpy/execution.py:69`) et
+  `send_order` renvoie `return "mock_id"` (`:46`) : **aucun retour d'exécution ne remonte au
+  portefeuille**. Trois chemins contournent le `RiskEngine` (`providers/vnpy_adapter.py:52,57,79`).
+  Statut mesuré : `[CÂBLÉ-NON-VALIDÉ]`. Prérequis Lot 1 et Lot 2.
 - **RAM :** < 200 MB.
 - **CPU :** Faible (Boucle C++).
 - **GPU :** Aucun.
@@ -152,6 +174,7 @@ Status: **ACTIF** (Mode: Fine-tuning & Inférence sur CPU en tâche de fond)
 - **Modules utilisés :** HuggingFace Transformers, bitsandbytes (Quantization).
 - **Ce que nous gardons :** Le modèle GGML/GGUF pour exécution locale via `llama.cpp` dans l'adaptateur `OllamaReasoner` du Reasoning Engine (AI-03).
 - **Dette Technique (MockReasoner) :** Actuellement, le système utilise `MockReasoner` par défaut pour ne pas bloquer l'Event Loop si Ollama n'est pas lancé. Conséquence : les objets `Knowledge` générés ne contiennent que des règles statistiques brutes (`AvoidPattern`/`PreferredPattern`) sans résumé textuel généré. Il faudra trancher plus tard sur l'activation d'Ollama local en production.
+- **Correctif de statut (2026-07-31) :** ce paragraphe présente `MockReasoner` comme une dette parmi d'autres. Mesure : `api/deps.py:53` injecte `MockReasoner()` sur **le seul chemin de production**. `OllamaReasoner` existe mais n'a aucun site d'appel productif. Le raisonnement des agents n'est donc pas « partiellement dégradé » — il est absent. Ce n'est pas « à trancher plus tard » : c'est un prérequis du Lot 4. Par ailleurs `ADR-002`, qui acte le remplacement de FinGPT par Ollama, décrit un état qui n'existe pas et doit être marqué `Superseded` (Lot 5).
 - **Architecture :** Transformer LLM.
 - **Temps estimé :** N/A (Abandonné actif).
 - **RAM/GPU :** 8-16 GB VRAM.

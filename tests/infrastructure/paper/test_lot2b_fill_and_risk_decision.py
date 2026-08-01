@@ -19,6 +19,7 @@ from typing import Any
 
 import pytest
 
+from aegis_trade.application.council.feature_provider import RollingFeatureProvider
 from aegis_trade.application.paper_trading.interfaces import (
     ICommissionModel,
     IExecutionReportRepository,
@@ -44,6 +45,9 @@ from aegis_trade.engine.risk_gate import (
     OrderRejectedByRisk,
     RiskGate,
     recorded_decision,
+)
+from aegis_trade.infrastructure.features.technical_extractor import (
+    TechnicalFeatureExtractor,
 )
 from aegis_trade.infrastructure.paper.broker import PaperBroker
 from aegis_trade.infrastructure.paper.deriv_gateway import DerivGateway, NoMarketDataError
@@ -375,6 +379,9 @@ async def test_orchestrator_stamps_the_real_verdict_onto_the_order() -> None:
         event_publisher=AsyncMock(),
         council=MagicMock(),
         policy_store=MagicMock(),
+        feature_provider=RollingFeatureProvider(
+            extractor=TechnicalFeatureExtractor()
+        ),
     )
 
     order_event = OrderEvent(
@@ -413,6 +420,9 @@ async def test_orchestrator_refused_order_never_reaches_the_broker() -> None:
         event_publisher=AsyncMock(),
         council=MagicMock(),
         policy_store=MagicMock(),
+        feature_provider=RollingFeatureProvider(
+            extractor=TechnicalFeatureExtractor()
+        ),
     )
 
     order_event = OrderEvent(

@@ -28,7 +28,9 @@ from aegis_trade.engine.risk_gate import (
     OrderRejectedByRisk,
     RiskGate,
 )
+from aegis_trade.application.council.feature_provider import RollingFeatureProvider
 from aegis_trade.application.council.orchestrator import MultiAgentCouncil
+from aegis_trade.domain.core import Tick
 from aegis_trade.domain.rl import IPolicyStore, PolicyDecision
 from aegis_trade.domain.council import MarketContext
 import numpy as np
@@ -46,7 +48,8 @@ class PaperTradingOrchestrator:
         portfolio_engine: PortfolioEngine,
         event_publisher: Callable[[EngineEvent], Awaitable[None]],
         council: MultiAgentCouncil,
-        policy_store: IPolicyStore
+        policy_store: IPolicyStore,
+        feature_provider: RollingFeatureProvider
     ):
         self.broker = broker
         self.feed = feed
@@ -55,6 +58,11 @@ class PaperTradingOrchestrator:
         self.event_publisher = event_publisher
         self.council = council
         self.policy_store = policy_store
+
+        # Sans source de features, tous les agents votent WAIT et le système
+        # tourne à vide en paraissant sain. Le paramètre est donc obligatoire :
+        # l'échec doit survenir à la construction, pas en séance.
+        self.feature_provider = feature_provider
 
         # Toute soumission passe par cette porte. `risk_manager` reste exposé
         # pour le kill switch de l'API, mais plus aucun chemin ne l'appelle
@@ -102,7 +110,7 @@ class PaperTradingOrchestrator:
                 self.is_running = False
                 raise
 
-    async def _process_bar(self, bar) -> None:
+    async def _process_bar(self, bar: MarketBar) -> None:
         latest_prices = {bar.symbol: Decimal(str(bar.close))}
 
         # Le prix observé alimente d'abord le portefeuille : c'est lui que le
@@ -114,22 +122,13 @@ class PaperTradingOrchestrator:
         if hasattr(self.broker, 'update_market_price'):
             self.broker.update_market_price(bar.close)
 
-        # 1. Build MarketContext (MVP placeholders for now until FeatureExtractor is built)
+        # 1. Features réelles du marché observé. Les constantes précédentes ne
+        # correspondaient à aucune clé lue par les agents : buy_score et
+        # sell_score restaient nuls, le verdict était WAIT et aucun ordre
+        # n'était atteignable, quel que soit le marché.
         context = MarketContext(
             symbol=bar.symbol,
-            features={
-                "trend_score": 0.5,
-                "momentum_score": 0.5,
-                "volatility_score": 0.5,
-                "liquidity_score": 0.5,
-                "pattern_score": 0.5,
-                "news_score": 0.5,
-                "portfolio_risk": 0.5,
-                "execution_cost": 0.5,
-                "rsi": 55.0,
-                "ema_distance": 0.1,
-                "atr": 1.5
-            },
+            features=self.feature_provider.observe_bar(bar),
             portfolio=self.portfolio_engine,
             latest_prices=latest_prices,
             memory_score=0.0
@@ -208,6 +207,13 @@ class PaperTradingOrchestrator:
 
         report = await self.broker.submit_order(paper_order)
 
+        # Seule latence réellement mesurée du système. `ExecutionAgent` lit
+        # `broker_latency_ms` : sans cette remontée, il vote WAIT 0.0 en
+        # permanence et ne peut jamais opposer son veto à un broker dégradé.
+        execution = getattr(report, "execution", None)
+        if execution is not None:
+            self.feature_provider.observe_latency(float(execution.latency_ms))
+
         # Boucle de retour : sans elle, la position existe chez le broker mais
         # pas dans le portefeuille qui sert au calcul de risque.
         self._apply_report_fills(report)
@@ -233,6 +239,22 @@ class PaperTradingOrchestrator:
     async def process_signal(self, signal: SignalEvent):
         """[DEPRECATED] Processes a trading signal from a strategy."""
         logger.warning("process_signal is deprecated. Council handles signal generation via _process_feed.")
+
+    def observe_tick(self, tick: Tick) -> None:
+        """Point d'entrée unique d'une cotation réelle dans le système.
+
+        Le spread ne peut venir que d'un tick : `MarketBar` ne porte pas de
+        bid/ask, et le fabriquer à partir d'une barre remplacerait un
+        placeholder par un autre. Le broker reçoit la même cotation dans le
+        même appel : alimenter l'un sans l'autre ferait voter le Council sur
+        un spread que le broker n'a jamais eu, ou ferait refuser l'exécution
+        (`NoMarketDataError`) alors que le Council vient de décider.
+        """
+        self.feature_provider.observe_tick(tick)
+
+        broker_observe = getattr(self.broker, "observe_tick", None)
+        if callable(broker_observe):
+            broker_observe(tick)
 
     def observe_market(self, bar: MarketBar) -> None:
         """Pousse un prix observé dans le portefeuille du RiskEngine.

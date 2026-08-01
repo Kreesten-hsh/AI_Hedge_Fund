@@ -10,6 +10,10 @@ from aegis_trade.domain.core import AssetClass, MarketBar, Symbol, TimeFrame
 from aegis_trade.engine.global_risk import GlobalRiskManager
 from aegis_trade.engine.portfolio import PortfolioEngine
 from aegis_trade.application.council.orchestrator import MultiAgentCouncil
+from aegis_trade.application.council.feature_provider import RollingFeatureProvider
+from aegis_trade.infrastructure.features.technical_extractor import (
+    TechnicalFeatureExtractor,
+)
 from aegis_trade.domain.rl import IPolicyStore
 from aegis_trade.domain.council import CouncilVerdict
 
@@ -94,9 +98,12 @@ async def test_orchestrator_council_integration():
         portfolio_engine=portfolio_engine,
         event_publisher=event_publisher,
         council=council,
-        policy_store=policy_store
+        policy_store=policy_store,
+        feature_provider=RollingFeatureProvider(
+            extractor=TechnicalFeatureExtractor()
+        )
     )
-    
+
     # Run _process_feed
     orchestrator.is_running = True
     await orchestrator._process_feed()

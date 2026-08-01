@@ -7,6 +7,8 @@ from aegis_trade.infrastructure.paper.deriv_gateway import DerivGateway, LiveDer
 from aegis_trade.engine.global_risk import GlobalRiskManager
 from aegis_trade.engine.portfolio import PortfolioEngine
 from aegis_trade.application.council.orchestrator import MultiAgentCouncil
+from aegis_trade.application.council.feature_provider import RollingFeatureProvider
+from aegis_trade.infrastructure.features.technical_extractor import TechnicalFeatureExtractor
 from aegis_trade.infrastructure.rl.policy_checkpoint_store import PolicyCheckpointStore
 
 from aegis_trade.infrastructure.reasoning.knowledge_repo import InMemoryKnowledgeRepository
@@ -86,7 +88,13 @@ def get_orchestrator() -> PaperTradingOrchestrator:
             portfolio_engine=portfolio,
             event_publisher=lambda e: None,
             council=council,
-            policy_store=policy_store
+            policy_store=policy_store,
+            # Une seule implémentation d'indicateurs alimente le Council :
+            # recalculer un RSI ailleurs ferait voter les agents sur des
+            # valeurs différentes de celles journalisées avec l'ordre.
+            feature_provider=RollingFeatureProvider(
+                extractor=TechnicalFeatureExtractor()
+            )
         )
     return _orchestrator
 

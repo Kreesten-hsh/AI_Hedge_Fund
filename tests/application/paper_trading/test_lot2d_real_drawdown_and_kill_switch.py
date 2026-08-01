@@ -28,6 +28,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from aegis_trade.application.council.feature_provider import RollingFeatureProvider
+from aegis_trade.infrastructure.features.technical_extractor import (
+    TechnicalFeatureExtractor,
+)
 from aegis_trade.application.paper_trading.orchestrator import PaperTradingOrchestrator
 from aegis_trade.domain.core import AssetClass, MarketBar, Symbol, TimeFrame
 from aegis_trade.engine.events import OrderAction, OrderEvent
@@ -74,6 +78,9 @@ def _orchestrator(
         event_publisher=AsyncMock(),
         council=MagicMock(),
         policy_store=MagicMock(),
+        feature_provider=RollingFeatureProvider(
+            extractor=TechnicalFeatureExtractor()
+        ),
     )
 
 
@@ -404,6 +411,9 @@ class TestMonitorLoopPublishesTheSnapshot:
             event_publisher=publisher,
             council=MagicMock(),
             policy_store=MagicMock(),
+        feature_provider=RollingFeatureProvider(
+            extractor=TechnicalFeatureExtractor()
+        ),
         )
 
         orchestrator.observe_market(_bar("50000"))

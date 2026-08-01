@@ -4,8 +4,23 @@ from decimal import Decimal
 from typing import Callable, Awaitable
 
 from aegis_trade.application.paper_trading.interfaces import IPaperBroker, IMarketFeed
-from aegis_trade.domain.paper.models import PaperOrder, ActionType, OrderType, PaperPortfolioSnapshot
-from aegis_trade.engine.events import SignalEvent, OrderEvent, EngineEvent
+from aegis_trade.domain.core import MarketBar, Symbol
+from aegis_trade.domain.paper.models import (
+    ActionType,
+    OrderType,
+    PaperExecutionReport,
+    PaperOrder,
+    PaperPortfolioSnapshot,
+)
+from aegis_trade.engine.events import (
+    EngineEvent,
+    FillEvent,
+    MarketEvent,
+    MetricsEvent,
+    OrderAction,
+    OrderEvent,
+    SignalEvent,
+)
 from aegis_trade.engine.global_risk import GlobalRiskManager
 from aegis_trade.engine.portfolio import PortfolioEngine
 from aegis_trade.engine.risk_gate import (
@@ -53,6 +68,7 @@ class PaperTradingOrchestrator:
         # Dashboard exposure
         self.latest_verdict = None
         self.latest_policy = None
+        self.latest_snapshot: PaperPortfolioSnapshot | None = None
 
     async def start(self):
         """Starts the market feed and the monitoring loop."""
@@ -88,6 +104,11 @@ class PaperTradingOrchestrator:
 
     async def _process_bar(self, bar) -> None:
         latest_prices = {bar.symbol: Decimal(str(bar.close))}
+
+        # Le prix observé alimente d'abord le portefeuille : c'est lui que le
+        # RiskEngine interroge. Fait avant toute décision, sinon le Council
+        # voterait sur une equity et un drawdown périmés d'un tick.
+        self.observe_market(bar)
 
         # Tell broker the current market price (for simulations of Limit/Stop/Market orders)
         if hasattr(self.broker, 'update_market_price'):
@@ -185,36 +206,157 @@ class PaperTradingOrchestrator:
             context_features=context_features
         )
 
-        return await self.broker.submit_order(paper_order)
+        report = await self.broker.submit_order(paper_order)
+
+        # Boucle de retour : sans elle, la position existe chez le broker mais
+        # pas dans le portefeuille qui sert au calcul de risque.
+        self._apply_report_fills(report)
+        return report
+
+    def _apply_report_fills(self, report: PaperExecutionReport) -> None:
+        """Applique au portefeuille les fills réellement rapportés par le broker.
+
+        On lit les fills du rapport plutôt que l'ordre soumis : un ordre peut
+        être partiellement exécuté, et créditer le volume demandé plutôt que le
+        volume obtenu fausserait l'exposition.
+        """
+        for fill in getattr(report, "fills", None) or []:
+            self.observe_fill(
+                symbol=fill.symbol,
+                action=OrderAction.BUY if fill.action == ActionType.BUY else OrderAction.SELL,
+                volume=fill.volume,
+                price=fill.price,
+                commission=fill.commission,
+                timestamp=fill.timestamp,
+            )
 
     async def process_signal(self, signal: SignalEvent):
         """[DEPRECATED] Processes a trading signal from a strategy."""
         logger.warning("process_signal is deprecated. Council handles signal generation via _process_feed.")
 
+    def observe_market(self, bar: MarketBar) -> None:
+        """Pousse un prix observé dans le portefeuille du RiskEngine.
+
+        Le kill switch lit `portfolio.equity` et `portfolio.equity_curve`. Sans
+        ce mark-to-market, l'equity reste figée au capital initial : le
+        drawdown est structurellement nul et le kill switch ne peut jamais
+        s'armer, quelles que soient les pertes réelles.
+        """
+        self.portfolio_engine.on_market_event(MarketEvent(timestamp=bar.timestamp, bar=bar))
+
+    def observe_fill(
+        self,
+        *,
+        symbol: Symbol,
+        action: OrderAction,
+        volume: Decimal,
+        price: Decimal,
+        commission: Decimal,
+        timestamp: datetime,
+    ) -> None:
+        """Applique un fill exécuté au portefeuille du RiskEngine.
+
+        Sans cette étape, une position ouverte chez le broker n'existe pas
+        pour le calcul de risque : l'exposition mesurée reste nulle.
+        """
+        self.portfolio_engine.on_fill_event(
+            FillEvent(
+                timestamp=timestamp,
+                symbol=symbol,
+                action=action,
+                volume=volume,
+                fill_price=price,
+                commission=commission,
+                exchange="PAPER",
+                strategy_id="paper_trading",
+            )
+        )
+
+    def build_snapshot(self) -> PaperPortfolioSnapshot:
+        """Photographie l'état réel du portefeuille.
+
+        Toutes les grandeurs sont dérivées du `PortfolioEngine`, qui fait
+        autorité (Lot 3). Le snapshot ne recalcule rien pour son propre compte :
+        un dashboard qui diverge du RiskEngine afficherait un risque rassurant
+        pendant que le kill switch s'arme, ou l'inverse.
+        """
+        portfolio = self.portfolio_engine
+        equity = portfolio.equity
+
+        # Le HWM se lit sur la courbe, pas sur le capital initial : un compte
+        # en gain puis en repli est bien en drawdown.
+        hwm = Decimal(str(portfolio.initial_capital))
+        for point in portfolio.equity_curve:
+            if point.equity > hwm:
+                hwm = point.equity
+
+        drawdown = 0.0
+        if hwm > 0 and equity < hwm:
+            drawdown = float((hwm - equity) / hwm * 100)
+
+        gross_exposure = Decimal("0.0")
+        net_exposure = Decimal("0.0")
+        floating_pnl = Decimal("0.0")
+        for symbol, position in portfolio.open_positions.items():
+            price = portfolio.get_latest_price(symbol)
+            if price is None:
+                # Une position sans prix observé n'est pas comptée à zéro : ce
+                # serait sous-estimer l'exposition. Elle est ignorée du calcul
+                # et le restera jusqu'au premier tick sur cet instrument.
+                continue
+            notional = position.volume * price
+            gross_exposure += abs(notional)
+            net_exposure += notional
+            floating_pnl += position.unrealized_pnl
+
+        return PaperPortfolioSnapshot(
+            timestamp=datetime.now(timezone.utc),
+            balance=portfolio.cash,
+            equity=equity,
+            drawdown=drawdown,
+            gross_exposure=gross_exposure,
+            net_exposure=net_exposure,
+            open_positions_count=len(portfolio.open_positions),
+            margin_used=Decimal("0.0"),
+            daily_pnl=equity - Decimal(str(portfolio.initial_capital)),
+            floating_pnl=floating_pnl,
+        )
+
+    def refresh_snapshot(self) -> PaperPortfolioSnapshot:
+        """Rafraîchit le snapshot exposé au dashboard."""
+        self.latest_snapshot = self.build_snapshot()
+        return self.latest_snapshot
+
+    async def publish_snapshot(self) -> PaperPortfolioSnapshot:
+        """Rafraîchit puis publie le snapshot sur le bus.
+
+        L'ancienne boucle calculait la valeur puis l'abandonnait (`_ = snapshot`) :
+        aucun consommateur ne pouvait voir le portefeuille évoluer.
+        """
+        snapshot = self.refresh_snapshot()
+        await self.event_publisher(
+            MetricsEvent(
+                timestamp=snapshot.timestamp,
+                metrics={
+                    "equity": float(snapshot.equity),
+                    "balance": float(snapshot.balance),
+                    "drawdown_pct": snapshot.drawdown,
+                    "gross_exposure": float(snapshot.gross_exposure),
+                    "net_exposure": float(snapshot.net_exposure),
+                    "floating_pnl": float(snapshot.floating_pnl),
+                    "open_positions": float(snapshot.open_positions_count),
+                },
+            )
+        )
+        return snapshot
+
     async def _monitor_portfolio_loop(self):
-        """Background loop taking snapshots every X seconds."""
+        """Boucle de fond : publie un snapshot réel à intervalle régulier."""
         while self.is_running:
-            await asyncio.sleep(5.0)  # Configurable interval, e.g. 5 seconds
-            
-            if hasattr(self.broker, 'account'):
-                account = self.broker.account
-                # Compute snapshot
-                balance = sum(b.total for b in account.balances.values())
-                
-                # Expose a snapshot for the dashboard
-                snapshot = PaperPortfolioSnapshot(
-                    timestamp=datetime.now(timezone.utc),
-                    balance=balance,
-                    equity=balance,  # Simplified
-                    drawdown=0.0,
-                    gross_exposure=Decimal("0.0"),
-                    net_exposure=Decimal("0.0"),
-                    open_positions_count=len(account.positions),
-                    margin_used=Decimal("0.0"),
-                    daily_pnl=Decimal("0.0"),
-                    floating_pnl=Decimal("0.0")
-                )
-                
-                # Emit snapshot as a METRICS event or just store it
-                # For now, it satisfies the requirement of regular snapshots
-                _ = snapshot
+            await asyncio.sleep(5.0)
+            try:
+                await self.publish_snapshot()
+            except Exception:
+                # Le monitoring ne doit jamais tuer la session de trading, mais
+                # un échec silencieux ferait croire que le risque est surveillé.
+                logger.exception("Portfolio snapshot failed; risk view is stale.")

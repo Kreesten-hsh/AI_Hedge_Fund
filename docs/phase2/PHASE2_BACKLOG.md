@@ -113,6 +113,14 @@ dans le dépôt ; `fill_price = Decimal("100.0")` et `latency_ms = 50.0` constan
 Un paper trading qui remplit toujours à 100.0 ne produit pas de l'expérience, il produit un faux
 historique — c'est-à-dire un poison pour AI-01 et AI-02. Traité au Lot 2.
 
+**Mise à jour du 2026-08-01 (Lots 2A–2F).** L'abonnement WebSocket aux ticks existe
+(`providers/deriv/market_gateway.py`), le fill constant et le `risk_decision` codé en dur sont levés,
+`scripts/run_live_paper_trading.py` est supprimé (il était mort à l'import et le réparer exigeait un
+agrégateur tick → barre inexistant). **Reste ouvert :** `on_trade` est toujours un `pass`, et
+`DerivMarketGateway` n'a aucun consommateur — le flux de `Tick` ne rejoint pas l'orchestrateur, qui
+consomme des `MarketBar`. Le critère de sortie du Lot 2 est donc démontré par tests sur barres
+synthétiques, pas sur un tick Deriv réel de bout en bout.
+
 ### `[ ]` AI-07-A — Micro Capital Live Trading
 Déclaré *(Fait — LiveDerivGateway, CapitalAllocation, sécurité)*. **Mesure, de nature sécuritaire :**
 `i_understand_this_is_real_money` vaut le littéral `True` (`api/deps.py:43`) — le consentement argent

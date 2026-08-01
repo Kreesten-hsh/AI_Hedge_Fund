@@ -82,8 +82,9 @@ une fonction d'une constante : un nombre stable, reproductible, et **sans rappor
 ## Résultats de la dernière exécution
 
 Aucune. La ligne *« Waiting for continuous run data via `scripts/run_live_paper_trading.py` »* supposait un
-script exécutable : **il meurt à l'import** (`scripts/run_live_paper_trading.py:9-12,44-49,63-68`). Il n'y a
-jamais eu de cycle en attente — il n'y a jamais eu de cycle.
+script exécutable : **il mourait à l'import**. Il n'y a jamais eu de cycle en attente — il n'y a jamais eu
+de cycle. Le script est supprimé depuis le Lot 2F (2026-08-01) : le réparer aurait exigé un agrégateur
+tick → barre absent du dépôt. Aucun run continu n'est donc planifiable tant que ce chaînon manque.
 
 Le modèle annoncé, `PPO-MultiAgent-v1`, n'a été soumis à aucun gate : `PolicyEvaluator(`, `PolicyTrainer(` et
 `ValidationRunner(` comptent **0 site d'appel**. Sortie réellement mesurée du comité en marche :

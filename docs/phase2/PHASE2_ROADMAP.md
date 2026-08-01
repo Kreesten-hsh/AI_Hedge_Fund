@@ -68,7 +68,8 @@ Ce pipeline reste la bonne cible. Ce qui change : **aucune de ses étapes n'a é
 
 ### `[ ]` 3. Paper Trading (AI-06a)
 - **Objectif :** exécution live sans argent réel, compte démo, connectivité broker, accumulation d'expériences.
-- **Bloquant :** `fill_price = Decimal("100.0")` et `latency_ms = 50.0` constants ; `risk_decision="APPROVED"` codé en dur ; `on_trade` est un `pass` (`infrastructure/live/vnpy/execution.py:69`) ; `scripts/run_live_paper_trading.py` meurt à l'import. Un paper trading qui remplit toujours à 100.0 n'accumule pas de l'expérience, il fabrique un faux historique — donc pire que rien pour AI-01/AI-02.
+- **Bloquant :** ~~`fill_price = Decimal("100.0")` et `latency_ms = 50.0` constants ; `risk_decision="APPROVED"` codé en dur~~ (levés au Lot 2B) ; `on_trade` est un `pass` (`infrastructure/live/vnpy/execution.py:69`) ; ~~`scripts/run_live_paper_trading.py` meurt à l'import~~ (script supprimé au Lot 2F). Un paper trading qui remplit toujours à 100.0 n'accumule pas de l'expérience, il fabrique un faux historique — donc pire que rien pour AI-01/AI-02.
+- **Bloquant restant :** aucun consommateur ne relie `DerivMarketGateway` (flux de `Tick`) à l'orchestrateur (qui consomme `IMarketFeed`, un flux de `MarketBar`). L'agrégation tick → barre n'existe nulle part dans le dépôt. Tant qu'elle manque, aucun tick Deriv réel n'atteint le Council.
 - **Devient atteignable après les Lots 0 → 2.**
 
 ### `[ ]` 4. Shadow Trading (AI-06b)

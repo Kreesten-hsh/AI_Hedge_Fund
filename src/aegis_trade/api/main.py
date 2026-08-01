@@ -5,6 +5,7 @@ from typing import Dict, Any
 
 from aegis_trade.api.routers import system, portfolio, orders, positions, risk, observability, trades
 from aegis_trade.api.routers import council, capital, knowledge, validation
+from aegis_trade.api.security import TOKEN_HEADER, allowed_origins
 from aegis_trade.api.ws.manager import ws_router
 
 app = FastAPI(
@@ -13,12 +14,14 @@ app = FastAPI(
     description="Local API for the Aegis Dashboard"
 )
 
+# Origines nommées : `["*"]` avec `allow_credentials=True` laisserait n'importe
+# quelle page ouverte dans le navigateur de l'opérateur piloter le broker.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Local-First architecture
+    allow_origins=allowed_origins(),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", TOKEN_HEADER],
 )
 
 app.include_router(system.router, prefix="/api/system", tags=["System"])
@@ -38,6 +41,6 @@ app.include_router(ws_router, prefix="/ws", tags=["WebSocket"])
 def read_root() -> Dict[str, Any]:
     return {"status": "Aegis API is running"}
 
-def start():
+def start() -> None:
     """Start the Uvicorn server."""
     uvicorn.run("aegis_trade.api.main:app", host="127.0.0.1", port=8000, reload=True)

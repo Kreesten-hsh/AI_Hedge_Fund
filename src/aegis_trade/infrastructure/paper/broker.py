@@ -1,4 +1,3 @@
-import asyncio
 from datetime import datetime, timezone
 import uuid
 from decimal import Decimal
@@ -8,7 +7,7 @@ from aegis_trade.application.paper_trading.interfaces import (
     IPaperBroker, ISlippageModel, ILatencyModel, ICommissionModel, IExecutionReportRepository
 )
 from aegis_trade.domain.paper.models import (
-    PaperOrder, OrderState, PaperExecutionReport, PaperExecution, PaperFill,
+    PaperOrder, OrderState, OrderType, PaperExecutionReport, PaperExecution, PaperFill,
     PaperAccount, ActionType, PaperPosition
 )
 from aegis_trade.engine.events import OrderLifecycleEvent, PositionEvent, AccountEvent
@@ -41,7 +40,7 @@ class PaperBroker(IPaperBroker):
     async def submit_order(self, order: PaperOrder) -> PaperExecutionReport:
         # 1. Recevoir et Valider
         if not order.can_transition_to(OrderState.SUBMITTED):
-            return self._reject_order(order, "Invalid state transition to SUBMITTED")
+            return await self._reject_order(order, "Invalid state transition to SUBMITTED")
             
         order = self._change_state(order, OrderState.SUBMITTED)
         await self._publish_lifecycle(order, "Order submitted to broker")
@@ -54,7 +53,7 @@ class PaperBroker(IPaperBroker):
         # but the broker does its own final margin sanity check.
         if order.action == ActionType.BUY and self.account.balances.get("USD"):
             if self.account.balances["USD"].available < notional_value:
-                return self._reject_order(order, "Insufficient funds")
+                return await self._reject_order(order, "Insufficient funds")
 
         order = self._change_state(order, OrderState.ACCEPTED)
         await self._publish_lifecycle(order, "Order accepted by broker")
@@ -123,10 +122,47 @@ class PaperBroker(IPaperBroker):
         # Simplified for immediate execution
         return False
 
-    def _reject_order(self, order: PaperOrder, reason: str) -> PaperExecutionReport:
+    async def cancel_all_orders(self) -> int:
+        """Aucun ordre n'est jamais en attente : `submit_order` remplit dans le
+        même appel. Il n'y a donc rien à annuler, et retourner 0 est la vérité
+        mesurée, pas un placeholder."""
+        return 0
+
+    async def close_all_positions(self) -> int:
+        """Aplatit chaque position ouverte au marché (kill switch).
+
+        Passe par `submit_order` pour que soldes, positions et journal
+        d'exécution restent cohérents : un chemin de liquidation qui muterait
+        le compte à la main divergerait du reste du broker.
+        """
+        # Snapshot : `_apply_fill` écrit dans le même dictionnaire.
+        open_positions = [
+            (symbol, position.volume)
+            for symbol, position in self.account.positions.items()
+            if position.volume != 0
+        ]
+
+        closed = 0
+        for symbol, volume in open_positions:
+            closing_order = PaperOrder(
+                order_id=f"HALT-{uuid.uuid4()}",
+                symbol=symbol,
+                action=ActionType.SELL if volume > 0 else ActionType.BUY,
+                order_type=OrderType.MARKET,
+                volume=abs(volume),
+                timestamp=datetime.now(timezone.utc),
+            )
+            report = await self.submit_order(closing_order)
+            if report.order.state == OrderState.FILLED:
+                closed += 1
+
+        return closed
+
+    async def _reject_order(self, order: PaperOrder, reason: str) -> PaperExecutionReport:
         order = self._change_state(order, OrderState.REJECTED)
-        asyncio.create_task(self._publish_lifecycle(order, f"Rejected: {reason}"))
-        
+        # `asyncio.create_task` sans référence forte peut être collecté avant
+        # d'avoir publié : un rejet silencieux est pire qu'un rejet lent.
+        await self._publish_lifecycle(order, f"Rejected: {reason}")
         report = PaperExecutionReport(
             timestamp=datetime.now(timezone.utc),
             order=order,

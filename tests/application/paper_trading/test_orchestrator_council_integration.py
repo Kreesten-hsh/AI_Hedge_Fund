@@ -1,6 +1,6 @@
 import pytest
 import asyncio
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, create_autospec
 from decimal import Decimal
 from typing import AsyncGenerator
 
@@ -27,21 +27,23 @@ async def test_orchestrator_council_integration():
     Verifies that _process_feed correctly builds MarketContext, calls MultiAgentCouncil,
     validates the resulting order with RiskManager, and submits it to the broker.
     """
-    # Mocks
-    broker = MagicMock(spec=IPaperBroker)
+    # Doubles à signature vérifiée : `MagicMock(spec=...)` accepte n'importe
+    # quels arguments, donc il laissait passer un appel à 3 arguments là où la
+    # production en passe 4. `create_autospec` échoue au moment de l'appel.
+    broker = create_autospec(IPaperBroker, instance=True)
     broker.submit_order = AsyncMock()
-    
+
     bar_mock = MagicMock()
     bar_mock.symbol = "AAPL"
     bar_mock.close = 150.0
     feed = MockFeed([bar_mock])
-    
-    risk_manager = MagicMock(spec=GlobalRiskManager)
+
+    risk_manager = create_autospec(GlobalRiskManager, instance=True)
     risk_manager.validate_order.return_value = (True, "OK")
-    
-    portfolio_engine = MagicMock(spec=PortfolioEngine)
-    
-    council = MagicMock(spec=MultiAgentCouncil)
+
+    portfolio_engine = create_autospec(PortfolioEngine, instance=True)
+
+    council = create_autospec(MultiAgentCouncil, instance=True)
     
     # Setup council mock to return a valid BUY verdict
     mock_verdict = CouncilVerdict(
@@ -66,7 +68,7 @@ async def test_orchestrator_council_integration():
     )
     council.create_order.return_value = order_event_mock
     
-    policy_store = MagicMock(spec=IPolicyStore)
+    policy_store = create_autospec(IPolicyStore, instance=True)
     policy_store.load_active_policy.return_value = None # Fallback to equal weights
     
     event_publisher = AsyncMock()
@@ -93,8 +95,13 @@ async def test_orchestrator_council_integration():
     # 2. Council evaluate should be called
     council.evaluate.assert_called_once()
     
-    # 3. Council create_order should be called with base volume 1.0
-    council.create_order.assert_called_once_with(mock_verdict, "AAPL", 1.0)
+    # 3. Council create_order should be called with base volume 1.0 and the context
+    council.create_order.assert_called_once()
+    create_args = council.create_order.call_args[0]
+    assert create_args[0] == mock_verdict
+    assert create_args[1] == "AAPL"
+    assert create_args[2] == 1.0
+    assert create_args[3].symbol == "AAPL"
     
     # 4. Risk Manager validate_order should be called (not evaluate_order)
     risk_manager.validate_order.assert_called_once()

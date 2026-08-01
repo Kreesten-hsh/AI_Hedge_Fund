@@ -11,6 +11,20 @@ from aegis_trade.infrastructure.live.vnpy.market_data import VnPyMarketGateway
 from aegis_trade.infrastructure.live.vnpy.execution import VnPyExecutionGateway
 from aegis_trade.infrastructure.live.vnpy.broker import VnPyBroker
 from aegis_trade.infrastructure.live.vnpy.manager import VnPyEngineManager
+from aegis_trade.engine.global_risk import GlobalRiskManager
+from aegis_trade.engine.portfolio import Portfolio
+from aegis_trade.engine.risk_gate import RiskGate
+
+
+def _permissive_risk_gate(symbol: Symbol, price: Decimal = Decimal("50000.0")) -> RiskGate:
+    """Porte de risque réelle, calibrée pour laisser passer l'ordre du test.
+
+    Un double qui approuve toujours ne prouverait rien : ici c'est le vrai
+    GlobalRiskManager qui décide, sur un portefeuille réel.
+    """
+    portfolio = Portfolio(initial_capital=10_000_000.0)
+    portfolio._latest_prices[symbol] = price
+    return RiskGate(GlobalRiskManager(), portfolio)
 
 
 def test_mapper():
@@ -51,7 +65,12 @@ async def test_execution_gateway():
     mock_engine = Mock()
     mock_engine.send_order.return_value = "vt_123"
     
-    gateway = VnPyExecutionGateway(mock_engine, publisher, mapper)
+    gateway = VnPyExecutionGateway(
+        mock_engine,
+        publisher,
+        mapper,
+        risk_gate=_permissive_risk_gate(Symbol(name="BTCUSDT", asset_class="CRYPTO")),
+    )
     
     order = OrderEvent(
         symbol=Symbol(name="BTCUSDT", asset_class="CRYPTO"),
@@ -72,11 +91,26 @@ async def test_execution_gateway():
     assert event.status == "submitted"
 
 def test_engine_manager():
-    manager = VnPyEngineManager()
+    # VnPyEngineManager owns vn.py's two non-daemon EventEngine threads: leaking
+    # one here hangs the whole interpreter at shutdown, so the suite never ends.
+    with VnPyEngineManager() as manager:
+        assert manager.health_check() == "Disconnected"
+        manager._is_connected = True
+        assert manager.health_check() == "Connected"
+
     assert manager.health_check() == "Disconnected"
-    manager._is_connected = True
-    assert manager.health_check() == "Connected"
-    
+    assert not manager.event_engine._active
+    assert not manager.event_engine._thread.is_alive()
+    assert not manager.event_engine._timer.is_alive()
+
+
+def test_engine_manager_close_is_idempotent():
+    manager = VnPyEngineManager()
+    manager.close()
+    manager.close()
+    assert not manager.event_engine._thread.is_alive()
+
+
 def test_broker_facade():
     market = Mock()
     exec_gateway = Mock()

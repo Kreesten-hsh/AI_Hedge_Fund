@@ -1,9 +1,10 @@
 from decimal import Decimal
-from typing import Optional, Callable
+from typing import Optional
 import logging
 
 from aegis_trade.engine.events import OrderEvent, FillEvent, OrderAction, MarketEvent
 from aegis_trade.engine.broker import Broker
+from aegis_trade.engine.risk_gate import RiskGate
 
 # Try to import from vnpy, fallback to None for mock/paper trading demo if not installed
 try:
@@ -39,28 +40,55 @@ class VnpyAdapter(Broker):
     Anti-Corruption Layer (ACL) for vn.py.
     Translates Aegis OrderEvents to vn.py OrderRequests, and listens for vn.py trades to emit FillEvents.
     """
-    def __init__(self, main_engine: MainEngine, event_engine: EventEngine, gateway_name: str = "PAPER"):
+    def __init__(
+        self,
+        main_engine: MainEngine,
+        event_engine: EventEngine,
+        gateway_name: str = "PAPER",
+        risk_gate: Optional[RiskGate] = None,
+    ):
         self.main_engine = main_engine
         self.event_engine = event_engine
         self.gateway_name = gateway_name
         self.event_queue: list[FillEvent] = []
-        
+        # Sans porte de risque, cet adaptateur ne route rien : il refuse. Un
+        # broker live câblé sans RiskEngine est le scénario que le kill switch
+        # est censé rendre impossible.
+        self.risk_gate = risk_gate
+
         # Register the callback
         if hasattr(self.event_engine, "register"):
             self.event_engine.register(EVENT_TRADE, self.on_trade)
-            
+
     def on_order_event(self, event: OrderEvent, latest_market_event: Optional[MarketEvent]) -> Optional[FillEvent]:
         """
-        Implementation of the Broker interface. 
+        Implementation of the Broker interface.
         Asynchronous brokers return None here, and fills are pushed asynchronously.
         """
-        self.send_order(event)
+        latest_prices = None
+        if latest_market_event is not None:
+            latest_prices = {latest_market_event.bar.symbol: latest_market_event.bar.close}
+        self.send_order(event, latest_prices)
         return None
 
-    def send_order(self, order_event: OrderEvent) -> str:
+    def send_order(
+        self,
+        order_event: OrderEvent,
+        latest_prices: Optional[dict] = None,
+    ) -> str:
         """
         Converts Aegis OrderEvent to vn.py OrderRequest and sends it.
+
+        Lève `OrderRejectedByRisk` si le RiskEngine refuse, `RuntimeError` si
+        aucune porte de risque n'a été injectée.
         """
+        if self.risk_gate is None:
+            raise RuntimeError(
+                "VnpyAdapter sans RiskGate : aucun ordre ne peut être routé. "
+                "Injecter un RiskGate à la construction."
+            )
+        self.risk_gate.authorize(order_event, latest_prices)
+
         direction = Direction.LONG if order_event.action == OrderAction.BUY else Direction.SHORT
         
         # In a full system, you would resolve the Exchange and Offset. Using defaults for paper trading.

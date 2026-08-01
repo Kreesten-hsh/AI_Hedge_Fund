@@ -11,6 +11,7 @@ from aegis_trade.domain.paper.models import (
     PaperAccount, ActionType, PaperPosition
 )
 from aegis_trade.engine.events import OrderLifecycleEvent, PositionEvent, AccountEvent
+from aegis_trade.engine.risk_gate import recorded_decision
 
 
 class PaperBroker(IPaperBroker):
@@ -109,7 +110,7 @@ class PaperBroker(IPaperBroker):
         report = PaperExecutionReport(
             timestamp=datetime.now(timezone.utc),
             order=order,
-            risk_decision="APPROVED",
+            risk_decision=recorded_decision(order.context_features),
             execution=execution,
             fills=[fill],
             portfolio_value_before=portfolio_before,

@@ -8,7 +8,11 @@ from aegis_trade.domain.paper.models import PaperOrder, ActionType, OrderType, P
 from aegis_trade.engine.events import SignalEvent, OrderEvent, EngineEvent
 from aegis_trade.engine.global_risk import GlobalRiskManager
 from aegis_trade.engine.portfolio import PortfolioEngine
-from aegis_trade.engine.risk_gate import OrderRejectedByRisk, RiskGate
+from aegis_trade.engine.risk_gate import (
+    RISK_DECISION_KEY,
+    OrderRejectedByRisk,
+    RiskGate,
+)
 from aegis_trade.application.council.orchestrator import MultiAgentCouncil
 from aegis_trade.domain.rl import IPolicyStore, PolicyDecision
 from aegis_trade.domain.council import MarketContext
@@ -164,7 +168,12 @@ class PaperTradingOrchestrator:
         Lève `OrderRejectedByRisk` si le RiskEngine refuse : aucun appelant ne
         peut soumettre sans passer par ce check, y compris l'API.
         """
-        self.risk_gate.authorize(order_event, latest_prices)
+        risk_decision = self.risk_gate.authorize(order_event, latest_prices)
+
+        # La décision voyage avec l'ordre : le broker inscrit dans son rapport
+        # ce que le RiskEngine a réellement dit, pas une constante d'affichage.
+        context_features = dict(getattr(order_event, "context_features", {}) or {})
+        context_features[RISK_DECISION_KEY] = risk_decision
 
         paper_order = PaperOrder(
             order_id=order_id or f"ORD-{datetime.now().timestamp()}",
@@ -173,7 +182,7 @@ class PaperTradingOrchestrator:
             order_type=OrderType.MARKET,
             volume=Decimal(str(order_event.volume)),
             timestamp=datetime.now(timezone.utc),
-            context_features=getattr(order_event, "context_features", {})
+            context_features=context_features
         )
 
         return await self.broker.submit_order(paper_order)

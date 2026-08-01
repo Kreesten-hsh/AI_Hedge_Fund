@@ -13,7 +13,7 @@ Elle vit dans `engine/` parce que ses trois dépendances (`OrderEvent`,
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Mapping, Protocol, TYPE_CHECKING
+from typing import Any, Mapping, Protocol, TYPE_CHECKING
 
 from aegis_trade.domain.core import Symbol
 from aegis_trade.engine.events import OrderEvent
@@ -21,6 +21,44 @@ from aegis_trade.engine.global_risk import GlobalRiskManager
 
 if TYPE_CHECKING:
     from aegis_trade.engine.portfolio import Portfolio
+
+
+RISK_DECISION_KEY = "risk_decision"
+"""Clé sous laquelle la décision est inscrite dans `context_features`."""
+
+RISK_DECISION_APPROVED = "APPROVED_BY_RISK_ENGINE"
+"""Verdict d'approbation explicite.
+
+`GlobalRiskManager.validate_order` renvoie `(True, "")` : le motif est vide
+quand l'ordre passe. Recopier ce motif tel quel produirait une décision
+indiscernable d'une décision absente, et un aval prudent la dégraderait en
+« UNRECORDED ». Le jeton est donc posé ici, une seule fois, plutôt que réécrit
+par chaque broker.
+"""
+
+
+RISK_DECISION_UNRECORDED = "UNRECORDED"
+"""Verdict d'un ordre arrivé au broker sans trace de passage au RiskEngine.
+
+Volontairement distinct d'un refus : le RiskEngine n'a rien dit, ce n'est donc
+ni une approbation ni un rejet. Le rapport d'exécution doit pouvoir montrer
+cette différence à l'audit.
+"""
+
+
+def recorded_decision(context_features: Mapping[Any, Any] | None) -> str:
+    """Décision de risque réellement portée par un ordre.
+
+    Un ordre sans trace exploitable est signalé `UNRECORDED`, jamais promu en
+    approbation : c'est la seule façon qu'un contournement du RiskEngine reste
+    visible dans le journal au lieu d'être maquillé.
+    """
+    if not context_features:
+        return RISK_DECISION_UNRECORDED
+    decision = context_features.get(RISK_DECISION_KEY)
+    if isinstance(decision, str) and decision:
+        return decision
+    return RISK_DECISION_UNRECORDED
 
 
 class OrderRejectedByRisk(Exception):
@@ -91,8 +129,15 @@ class RiskGate:
         self,
         order: OrderEvent,
         latest_prices: Mapping[Symbol, Decimal] | None = None,
-    ) -> None:
-        """Laisse passer, ou lève `OrderRejectedByRisk`."""
+    ) -> str:
+        """Laisse passer en renvoyant le verdict, ou lève `OrderRejectedByRisk`.
+
+        Le verdict est retourné pour être inscrit dans l'ordre transmis au
+        broker : sans cette trace, un broker ne peut que supposer que l'ordre a
+        été validé, et une approbation écrite en dur côté broker survit même
+        quand le check a été contourné.
+        """
         approved, reason = self.evaluate(order, latest_prices)
         if not approved:
             raise OrderRejectedByRisk(order, reason)
+        return RISK_DECISION_APPROVED

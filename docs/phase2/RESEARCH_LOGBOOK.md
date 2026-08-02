@@ -138,3 +138,38 @@ Trace des validations de politiques RL (AI-04).
   - `pytest` : 417 tests passing (0 failure) — **Delta: +3 tests de validation ajoutés, 0 régression**
   - `mypy --strict src/` : 537 erreurs (baseline: 537) — **Delta: 0 régression**
   - `ruff check` : 308 erreurs (baseline: 310) — **Delta: -2 erreurs (amélioration)**
+
+---
+
+## 2026-08-02 — Phase 3 Clôturée : Intégration Réelle Qlib/LightGBM (Lot 4 §Qlib)
+
+- **Hypothèse testée** : Un modèle LightGBM entraîné sur les features techniques du FeatureStore
+  (return_*, ema_*, rsi, macd, atr, bb_*) avec cible `forward_return_1` (rendement barre suivante)
+  peut-il surperformer un benchmark Buy & Hold sur Crash 1000 M1 ?
+
+- **Résultat : REJETÉ (score 30/100, is_approved=false).** C'est un résultat scientifiquement correct.
+  Le pipeline de validation fonctionne exactement comme prévu : il a rejeté une hypothèse faible.
+  - Hold-Out : Sharpe -0.39, max_drawdown 1.8% → **FAIL**
+  - Walk-Forward : Sharpe -0.69, win_rate 0.0% (5 folds) → **FAIL**
+  - Monte-Carlo : P(ruine) 0.0% (1 seul trade échantillonné) → **PASS**
+  - Benchmark : Alpha -0.0173, Beta -1.006 → **FAIL**
+
+- **Composants créés/réécrits** :
+  1. `scripts/train_qlib_model.py` : Pipeline complète (load parquet → features → split chrono 70/30 → train LightGBM → validation 4 campagnes → export conditionnel).
+  2. `providers/qlib/model_factory.py` : Vrai `LightGBMModel` via `lightgbm.train()`, avec save/load sidecar JSON, exclusion de `close_price` et de la cible de la matrice de features.
+  3. `providers/qlib/dataset_builder.py` : `build_supervised()` calcule le vrai label `forward_return_1` via `price.shift(-1) / price - 1`.
+  4. `providers/qlib/trainer.py` : Métriques réelles (RMSE, MAE, directional_accuracy).
+  5. `application/strategy/ml_strategy.py` : Seuils en rendement (0.0002/-0.0002) au lieu de probabilité (ancien mock 0.52/0.48).
+  6. `tests/providers/qlib/test_qlib_adapter.py` : 14 tests réels couvrant label leakage, real training, strategy wiring, et rejets bruyants.
+
+- **Décision architecturale** : LightGBM-direct est un contournement temporaire (mlflow 1.27.0 incompatible avec qlib 0.9.7). Retour à `qlib.init()` standard au Lot 5 après upgrade mlflow.
+
+- **Vérifications de santé de la base de code** :
+  - `pytest` : 430 tests passing (0 failure) — **Delta: +13 tests Qlib, 0 régression**
+  - `mypy --strict src/` : 536 erreurs (baseline: 537) — **Delta: -1 (amélioration)**
+  - `ruff check` : 305 erreurs (baseline: 308) — **Delta: -3 (amélioration)**
+
+- **Prochaine étape** : Le rejet du modèle baseline est normal — les features techniques standard
+  sur du M1 synthétique n'ont pas assez de signal prédictif. Les axes d'amélioration sont :
+  (a) features microstructure spécifiques aux synthétiques Deriv, (b) horizon de prédiction ajusté,
+  (c) hyperparameter tuning. Mais d'abord, Phase 4 (Kronos-mini) puis Phase 5 (wiring agents).

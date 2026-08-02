@@ -32,7 +32,7 @@ Correspond à la ligne `PLAN_DE_CORRECTION.md:155`.
 Principe directeur : **on ne réécrit pas l'intention, on corrige l'état déclaré.** Les documents disent
 des choses justes sur ce qu'on veut construire ; ils mentent sur ce qui existe.
 
-## 2. Avancement — Phase 2 (Validateurs Réels) Clôturée (2026-08-02)
+## 2. Avancement — Phase 3 (Qlib/LightGBM Réel) Clôturée (2026-08-02)
 
 - **Lot 0 (Gates)** : ✅ TERMINÉ (413+ tests pass, mypy strict stable).
 - **Lot 1 (RiskEngine Authority)** : ✅ TERMINÉ (4 chemins de bypass fermés, RiskGate centralisé).
@@ -42,6 +42,13 @@ des choses justes sur ce qu'on veut construire ; ils mentent sur ce qui existe.
   - Calculs réels implémentés (Backtest, Monte-Carlo bootstrap 1000+ itérations, Sharpe/Drawdown/WinRate réels).
   - Dynamisé `git_version` (git rev-parse) et `data_hash` (SHA256 parquet) dans `ValidationRunner`.
   - Documenté les seuils provisoires dans `ValidationConfig`.
+- **Phase 3 (Intégration Qlib/LightGBM Réelle)** : ✅ TERMINÉ.
+  - Vrai `LightGBMModel` via `lightgbm.train()` (contournement LightGBM-direct, mlflow 1.27.0).
+  - `DatasetBuilder.build_supervised()` construit le label `forward_return_1` (shift(-1) rendement).
+  - `MLStrategy` recalibrée en seuils de rendement (0.0002/-0.0002).
+  - Script `train_qlib_model.py` complet : load → features → split chrono → train → validation → export conditionnel.
+  - 14 tests réels dans `test_qlib_adapter.py` (label leakage, real training, strategy wiring).
+  - **Résultat de validation : score 30/100, REJETÉ.** Résultat scientifiquement correct (rejet propre = succès du pipeline).
 
 | # | Fichier | Traitement appliqué |
 |---|---|---|

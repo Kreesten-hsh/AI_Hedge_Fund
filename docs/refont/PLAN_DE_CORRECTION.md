@@ -14,7 +14,7 @@
 ## ORDRE NON NÉGOCIABLE (Mis à jour — Directive CTO 2026-08-02)
 
 ```
-Lot 0 ✅ ──► Lot 1 ✅ ──► Lot 2 (Complété: Sourcing Réel) ──► Lot 4 (Validateurs Réels)
+Lot 0 ✅ ──► Lot 1 ✅ ──► Lot 2 (Complété: Sourcing Réel) ✅ ──► Lot 4 (Validateurs Réels) ✅
                          │
                          └──► Intégration Qlib/Kronos Réelle (Phases 3-6)
                                    │

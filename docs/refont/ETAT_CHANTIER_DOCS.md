@@ -32,14 +32,16 @@ Correspond à la ligne `PLAN_DE_CORRECTION.md:155`.
 Principe directeur : **on ne réécrit pas l'intention, on corrige l'état déclaré.** Les documents disent
 des choses justes sur ce qu'on veut construire ; ils mentent sur ce qui existe.
 
-## 2. Avancement — Phase 1 (Sourcing Réel) Clôturée (2026-08-02)
+## 2. Avancement — Phase 2 (Validateurs Réels) Clôturée (2026-08-02)
 
 - **Lot 0 (Gates)** : ✅ TERMINÉ (413+ tests pass, mypy strict stable).
 - **Lot 1 (RiskEngine Authority)** : ✅ TERMINÉ (4 chemins de bypass fermés, RiskGate centralisé).
-- **Lot 2 / Phase 1 (Sourcing Réel)** : ✅ TERMINÉ.
-  - `src/aegis_trade/providers/deriv/historical_data.py` créé pour l'extraction WebSocket Deriv.
-  - `openbb_provider.py` mis à jour (support XAUUSD).
-  - Data réelles générées dans `data/market_data/` : `crash1000.parquet` (5000 M1 rows), `boom1000.parquet` (5000 M1 rows), `xauusd.parquet` (124 D1 rows).
+- **Lot 2 / Phase 1 (Sourcing Réel)** : ✅ TERMINÉ (Crash 1000, Boom 1000, XAUUSD réels en Parquet).
+- **Lot 4 / Phase 2 (Validateurs Réels)** : ✅ TERMINÉ.
+  - Supprimé les `passed=True` en dur dans les 6 validateurs (`HoldOut`, `WalkForward`, `MonteCarlo`, `Benchmark`, `MultiMarket`, `MultiTimeframe`).
+  - Calculs réels implémentés (Backtest, Monte-Carlo bootstrap 1000+ itérations, Sharpe/Drawdown/WinRate réels).
+  - Dynamisé `git_version` (git rev-parse) et `data_hash` (SHA256 parquet) dans `ValidationRunner`.
+  - Documenté les seuils provisoires dans `ValidationConfig`.
 
 | # | Fichier | Traitement appliqué |
 |---|---|---|

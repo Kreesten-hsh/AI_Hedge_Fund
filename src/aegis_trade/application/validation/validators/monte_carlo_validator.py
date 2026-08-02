@@ -36,12 +36,13 @@ class MonteCarloValidator(IValidator):
             trades_pnl = [t['pnl'] for t in backtester.trades_history if not t.get('rejected', False)]
             
             if not trades_pnl:
-                # Si aucun trade n'est généré, la stratégie est inerte : risque ruine = 0 mais score neutre
+                # Si aucun trade n'est généré, la stratégie n'est pas validable (aucun trade)
+                logger.warning("MonteCarloValidator: Aucun trade généré par la stratégie. Échec de validation.")
                 return ValidationCampaignResult(
                     campaign_type=ValidationCampaignType.MONTE_CARLO,
-                    metrics={"ruin_probability": 0.0},
-                    passed=True,
-                    details={"iterations": config.monte_carlo_iterations, "trades_count": 0}
+                    metrics={"ruin_probability": 1.0},
+                    passed=False,
+                    details={"iterations": config.monte_carlo_iterations, "trades_count": 0, "reason": "Aucun trade généré, résultat non concluant"}
                 )
                 
             rng = np.random.default_rng(config.seed)

@@ -28,7 +28,7 @@ class DerivHistoricalData:
 
     async def fetch_candles(
         self,
-        symbol: str = "1HZ200V",  # Crash 1000 Index
+        symbol: str = "CRASH1000",  # Crash 1000 Index
         count: int = 5000,
         granularity: int = 60  # 60s = M1
     ) -> pd.DataFrame:
@@ -83,7 +83,7 @@ class DerivHistoricalData:
 
     def fetch_candles_sync(
         self,
-        symbol: str = "1HZ200V",
+        symbol: str = "CRASH1000",
         count: int = 5000,
         granularity: int = 60
     ) -> pd.DataFrame:

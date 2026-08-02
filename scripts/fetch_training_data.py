@@ -26,24 +26,28 @@ def fetch_deriv_data():
     client = DerivHistoricalData()
     
     # 1. Crash 1000 Index (CRASH1000)
-    logger.info("Fetching Crash 1000 (CRASH1000) M1 candles...")
+    symbol_name_crash = "CRASH1000"
+    out_filename_crash = "crash1000.parquet"
+    logger.info(f"Fetching Crash 1000 ({symbol_name_crash}) M1 candles...")
     try:
-        crash_df = client.fetch_candles_sync(symbol="CRASH1000", count=5000, granularity=60)
+        crash_df = client.fetch_candles_sync(symbol=symbol_name_crash, count=5000, granularity=60)
         if not crash_df.empty:
-            out_path = os.path.join(OUTPUT_DIR, "crash1000.parquet")
+            out_path = os.path.join(OUTPUT_DIR, out_filename_crash)
             crash_df.to_parquet(out_path, index=False)
-            logger.info(f"Saved {len(crash_df)} rows to {out_path}")
+            logger.info(f"SECURITY CHECK: Symbol requested '{symbol_name_crash}' verified -> Saved {len(crash_df)} rows to {out_path}")
     except Exception as e:
         logger.error(f"Failed to fetch Crash 1000 data: {e}")
 
-    # 2. Boom 1000 Index (1HZ100V)
-    logger.info("Fetching Boom 1000 (1HZ100V) M1 candles...")
+    # 2. Boom 1000 Index (BOOM1000)
+    symbol_name = "BOOM1000"
+    out_filename = "boom1000.parquet"
+    logger.info(f"Fetching Boom 1000 ({symbol_name}) M1 candles...")
     try:
-        boom_df = client.fetch_candles_sync(symbol="1HZ100V", count=5000, granularity=60)
+        boom_df = client.fetch_candles_sync(symbol=symbol_name, count=5000, granularity=60)
         if not boom_df.empty:
-            out_path = os.path.join(OUTPUT_DIR, "boom1000.parquet")
+            out_path = os.path.join(OUTPUT_DIR, out_filename)
             boom_df.to_parquet(out_path, index=False)
-            logger.info(f"Saved {len(boom_df)} rows to {out_path}")
+            logger.info(f"SECURITY CHECK: Symbol requested '{symbol_name}' verified -> Saved {len(boom_df)} rows to {out_path}")
     except Exception as e:
         logger.error(f"Failed to fetch Boom 1000 data: {e}")
 

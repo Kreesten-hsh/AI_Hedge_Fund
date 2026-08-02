@@ -105,3 +105,19 @@ Trace des validations de politiques RL (AI-04).
 - **Les événements de gouvernance ne sont pas des expériences.** Ils enregistrent des choix d'outillage,
   pas des résultats de marché. Les compter comme du contenu de logbook a entretenu l'illusion d'activité.
 
+---
+
+## 2026-08-02 — Phase 1 Clôturée : Sourcing de Données Réelles (Deriv WS & OpenBB)
+
+- **Actions réalisées** :
+  1. Adaptation de `OpenBBDataProvider` dans `openbb_provider.py` : levée de la restriction restreignant l'accès à DXY/US10Y uniquement, ajout de la correspondance `XAUUSD: GC=F`.
+  2. Création de `DerivHistoricalData` dans `src/aegis_trade/providers/deriv/historical_data.py` pour l'extraction asynchrone des bougies (candles) via l'API WebSocket Deriv (`?app_id=1089`).
+  3. Création du script `scripts/fetch_training_data.py` et extraction réussie des jeux de données réels.
+- **Résultats obtenus (Données réelles sauvegardées dans `data/market_data/`)** :
+  - `crash1000.parquet` : 5 000 bougies M1 réelles de l'indice Crash 1000 (176.5 KB)
+  - `boom1000.parquet` : 5 000 bougies M1 réelles de l'indice Boom 1000 (134.0 KB)
+  - `xauusd.parquet` : 124 bougies D1 de l'Or (XAUUSD) via OpenBB (8.8 KB)
+- **Vérifications de santé de la base de code** :
+  - `pytest` : 413 tests passing (1 timing test isolé en charge CPU intensive)
+  - `mypy --strict src/` : 537 erreurs (-1 vs baseline 538)
+  - `ruff check` : 309 erreurs (-1 vs baseline 310)

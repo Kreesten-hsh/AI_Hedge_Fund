@@ -1,7 +1,6 @@
 import logging
 from datetime import datetime
 from typing import Sequence
-import pandas as pd
 from openbb import obb
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
@@ -39,9 +38,6 @@ class OpenBBDataProvider(IDataProvider):
         self, symbol: Symbol, timeframe: TimeFrame, start: datetime, end: datetime
     ) -> Sequence[MarketBar]:
         
-        if symbol.name not in ["DXY", "US10Y"]:
-            raise DataProviderError(f"Mission C restricts OpenBBDataProvider to DXY and US10Y exclusively. Requested: {symbol.name}")
-            
         # Mapping timeframe to OpenBB interval
         interval_map = {
             TimeFrame.M1: "1m",
@@ -54,24 +50,35 @@ class OpenBBDataProvider(IDataProvider):
         }
         interval = interval_map.get(timeframe, "1d")
         
-        # Hardcode ticker map for known macro indices
+        # Hardcode ticker map for known symbols
         ticker_map = {
             "DXY": "DX-Y.NYB",
-            "US10Y": "^TNX"
+            "US10Y": "^TNX",
+            "XAUUSD": "GC=F",
+            "GOLD": "GC=F"
         }
-        target_ticker = ticker_map[symbol.name]
+        target_ticker = ticker_map.get(symbol.name, symbol.name)
         
         try:
-            # We enforce a timeout if the openbb client allows it. 
-            # Using obb.index.price.historical as discovered via SDK inspection.
-            res = obb.index.price.historical(
-                symbol=target_ticker,
-                provider=self.default_provider,
-                interval=interval,
-                start_date=start.strftime("%Y-%m-%d"),
-                end_date=end.strftime("%Y-%m-%d"),
-                timeout=self.timeout
-            )
+            # Equity price historical for commodities/stocks, index for macro indices
+            if symbol.name in ["DXY", "US10Y"]:
+                res = obb.index.price.historical(  # type: ignore[union-attr]
+                    symbol=target_ticker,
+                    provider=self.default_provider,
+                    interval=interval,
+                    start_date=start.strftime("%Y-%m-%d"),
+                    end_date=end.strftime("%Y-%m-%d"),
+                    timeout=self.timeout
+                )
+            else:
+                res = obb.equity.price.historical(  # type: ignore[union-attr]
+                    symbol=target_ticker,
+                    provider=self.default_provider,
+                    interval=interval,
+                    start_date=start.strftime("%Y-%m-%d"),
+                    end_date=end.strftime("%Y-%m-%d"),
+                    timeout=self.timeout
+                )
             df = res.to_df()
             
             if df.empty:

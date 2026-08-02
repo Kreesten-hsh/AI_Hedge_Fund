@@ -11,22 +11,28 @@
 
 ---
 
-## ORDRE NON NÉGOCIABLE
+## ORDRE NON NÉGOCIABLE (Mis à jour — Directive CTO 2026-08-02)
 
 ```
-Lot 0  ──►  Lot 1  ──►  Lot 2  ──►  Lot 3  ──►  Lot 4  ──►  Lot 5  ──►  Lot 6
-gates      risk      données     calcul    pipeline     dépôt      dette
-           engine    réelles     unique   scientifique             résiduelle
+Lot 0 ✅ ──► Lot 1 ✅ ──► Lot 2 (Complété: Sourcing Réel) ──► Lot 4 (Validateurs Réels)
+                         │
+                         └──► Intégration Qlib/Kronos Réelle (Phases 3-6)
+                                   │
+                                   ▼
+                         [Démo Fonctionnelle]
+                                   │
+                                   ├──► Lot 3 (Souveraineté Numérique) — MANDAT AVANT AI-07b LIVE REAL MONEY
+                                   ├──► Lot 5 Complet (Docker non-root, Upgrade mlflow, Clean deps, LICENSE)
+                                   └──► Lot 6 (Dette résiduelle)
 ```
 
-Trois règles de séquencement, dérivées de `CLAUDE.md` :
+Règles de séquencement impératives :
 
-1. **Lot 0 avant tout le reste.** Tant que `mypy` et `pytest` n'assemblent pas, aucune correction
-   n'est vérifiable — on corrigerait à l'aveugle, exactement comme les 38 commits précédents.
-2. **Lot 1 avant toute exposition réseau.** Aucun conteneur ne se lance, aucun port ne s'ouvre
-   tant que les 4 contournements du RiskEngine tiennent.
-3. **Lot 4 avant tout branchement de modèle ML.** Loi du pipeline `CLAUDE.md` : un modèle branché
-   sur une feature non validée statistiquement est un refus, pas une tâche.
+1. **Lot 0 et Lot 1 : TERMINÉS.** Les fondations (Gates & RiskEngine Authority) sont scellées et validées par tests.
+2. **Sourcing de Données Réelles (Lot 2 complet) + Validateurs Réels (Lot 4) avant Intégration ML.** Aucun modèle (Qlib/LightGBM ou Kronos) n'est entraîné ni validé sans calculs réels sur de vraies données (Deriv WS / OpenBB).
+3. **Engagements explicites sur Lot 3 et Lot 5 :**
+   - **Lot 3 (Souveraineté numérique & déduplication)** : Reporté temporairement après la démo fonctionnelle. **RAPPEL : Le Lot 3 est un prérequis OBLIGATOIRE avant toute ouverture de la phase AI-07b (trading réel avec argent réel).**
+   - **Lot 5 complet (Upgrade `mlflow`, Docker, deps, LICENSE)** : Le passage par LightGBM-direct (Phases 3-6) est un contournement temporaire dû à l'incompatibilité de `mlflow 1.27.0`. **Le Lot 5 est OBLIGATOIRE avant de pouvoir sortir du contournement LightGBM-direct et réactiver le `qlib.init()` standard.**
 
 ---
 

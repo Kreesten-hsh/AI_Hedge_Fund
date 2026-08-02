@@ -72,21 +72,21 @@ Ce document détaille l'audit technique de chaque dépôt (actif et inspirationn
 ---
 
 ## 3. Qlib (Niveau S - Quant Lab)
-- **Pourquoi l'utiliser ?** Standard Microsoft pour la génération de features quantitatives (Alpha158, Alpha360).
-- **Pourquoi ne pas le réécrire nous-mêmes ?** Implémenter 158 formules mathématiques matricielles optimisées en C (Cython) prendrait des mois avec des risques d'erreurs mathématiques.
-- **Modules utilisés :** `qlib.data.dataset`, `qlib.utils`.
-- **Classes :** `DatasetH`, `ExpressionOps`.
-- **Fonctions :** Extracteurs d'Alpha.
-- **Architecture :** Data pipeline DAG (Directed Acyclic Graph).
-- **Ce que nous gardons :** Le moteur de Feature Engineering.
-- **Ce que nous supprimons :** Les modèles Deep Learning EOD (LightGBM, etc.) fournis par défaut, l'interface `Workflow`.
+- **Pourquoi l'utiliser ?** Standard Microsoft pour la génération de features quantitatives et l'entraînement de modèles quantitatifs.
+- **Note d'implémentation (Directive CTO 2026-08-02) :** `qlib.init()` souffre actuellement d'une incompatibilité au niveau de `mlflow 1.27.0` (`mlflow.exceptions` manquant). L'intégration utilise un entraînement **LightGBM direct** (`lightgbm 4.7.0`) consommant le `FeatureStore` Aegis via `QlibDataset` et `DatasetBuilder`. **Ceci est un contournement TEMPORAIRE.** Le passage au `qlib.init()` standard et au workflow Qlib complet aura lieu au **Lot 5** après la mise à jour de `mlflow`.
+- **Modules utilisés :** `qlib.data.dataset`, `qlib.utils` (complétés par `lightgbm`).
+- **Classes :** `QlibDataset`, `DatasetBuilder`, `LightGBMModel`.
+- **Fonctions :** Extracteurs d'Alpha et entraînement direct LightGBM.
+- **Architecture :** Data pipeline DAG + interface `IModel`.
+- **Ce que nous gardons :** Le modèle et la structure de dataset.
+- **Ce que nous supprimons :** Tout mock ou façade fictive.
 - **Temps estimé :** 3 Semaines.
 - **RAM :** 4 GB.
-- **CPU :** Extrêmement élevé (Calcul matriciel tensoriel).
-- **GPU :** Aucun (ou CUDA pour certains ops).
-- **Risques :** Conçu pour des données Journalières (Daily), doit être adapté au HFT.
+- **CPU :** Faible à modéré.
+- **GPU :** Aucun.
+- **Risques :** Conçu pour des données Journalières (Daily), doit être adapté aux données intraday.
 - **Alternatives :** TA-Lib (Moins IA-friendly), Pandas-TA (Moins optimisé).
-- **Tests :** Validation mathématique des outputs sur données statiques.
+- **Tests :** Validation via Walk-Forward, Hold-Out, Monte-Carlo et Benchmarks.
 
 ---
 

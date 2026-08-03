@@ -127,8 +127,17 @@ def main() -> int:
     parser.add_argument("--parquet", default="crash1000.parquet")
     parser.add_argument("--train-ratio", type=float, default=0.7)
     parser.add_argument("--n-estimators", type=int, default=300)
-    parser.add_argument("--buy-threshold", type=float, default=0.0002)
-    parser.add_argument("--sell-threshold", type=float, default=-0.0002)
+    parser.add_argument("--commission-rate", type=float, default=0.001)
+    parser.add_argument("--slippage-bps", type=float, default=5.0)
+    parser.add_argument(
+        "--safety-margin",
+        type=float,
+        default=1.0,
+        help=(
+            "Multiplicateur du coût aller-retour pour le seuil d'entrée. "
+            "1.0 = seuil de rentabilité strict. Refuse toute valeur < 1.0."
+        ),
+    )
     parser.add_argument(
         "--output", default="data/models/lightgbm_latest.txt", help="Chemin d'export"
     )
@@ -152,11 +161,25 @@ def main() -> int:
     report = QlibTrainer().train(model, train_dataset)
     logger.info("Rapport d'entraînement : %s", json.dumps(report, indent=2))
 
-    # 3. Validation sur le segment de test, jamais vu à l'entraînement
-    strategy = MLStrategy(
+    # 3. Validation sur le segment de test, jamais vu à l'entraînement.
+    # Le broker de validation et la stratégie partagent la MÊME source de coût :
+    # le seuil d'entrée budgète exactement le péage que la simulation appliquera.
+    def broker_factory() -> SimulatedBroker:
+        return SimulatedBroker(
+            commission_rate=args.commission_rate, slippage_bps=args.slippage_bps
+        )
+
+    cost_model = broker_factory().cost_model
+    strategy = MLStrategy.from_cost_model(
         predictor=QlibPredictor(model),
-        buy_threshold=args.buy_threshold,
-        sell_threshold=args.sell_threshold,
+        cost_model=cost_model,
+        safety_margin=args.safety_margin,
+    )
+    logger.info(
+        "Coût aller-retour %.2f bps -> seuil d'entrée %.6f (marge %.2fx).",
+        cost_model.round_trip_cost * 10_000.0,
+        strategy.buy_threshold,
+        args.safety_margin,
     )
     config = ValidationConfig(
         markets=[symbol],
@@ -175,13 +198,17 @@ def main() -> int:
     artifact = runner.run_validation(
         strategy=strategy,
         data_feed=ListDataFeed(test_sets),
-        broker_factory=SimulatedBroker,
+        broker_factory=broker_factory,
         config=config,
     )
 
     print("\n" + "=" * 70)
     print(f"  VALIDATION — {symbol.name} {timeframe.value}")
     print("=" * 70)
+    print(
+        f"  Coût aller-retour : {cost_model.round_trip_cost * 10_000.0:.2f} bps"
+        f"  |  Seuil d'entrée : {strategy.buy_threshold:.6f}"
+    )
     for campaign in artifact.report.campaigns:
         status = "PASS" if campaign.passed else "FAIL"
         print(f"  [{status}] {campaign.campaign_type.value:<16} {campaign.metrics}")

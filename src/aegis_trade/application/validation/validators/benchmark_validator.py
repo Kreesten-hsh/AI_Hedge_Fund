@@ -1,5 +1,5 @@
 import logging
-from typing import Type, List
+from typing import Callable, List
 import numpy as np
 from aegis_trade.domain.validation import ValidationCampaignResult, ValidationCampaignType
 from aegis_trade.domain.strategy import IStrategy
@@ -41,7 +41,7 @@ class BenchmarkValidator(IValidator):
         self, 
         strategy: IStrategy, 
         data_feed: IDataFeed, 
-        broker_factory: Type[IBroker], 
+        broker_factory: Callable[[], IBroker],
         config: ValidationConfig
     ) -> ValidationCampaignResult:
         logger.info(f"Running BenchmarkValidator ({config.benchmarks})...")
@@ -95,7 +95,8 @@ class BenchmarkValidator(IValidator):
                     "alpha": round(alpha, 4),
                     "beta": round(beta, 4),
                     "strategy_sharpe": round(strat_sharpe, 4),
-                    "benchmark_sharpe": round(bench_sharpe, 4)
+                    "benchmark_sharpe": round(bench_sharpe, 4),
+                    "net_return": round(strat_return, 6)
                 },
                 passed=passed,
                 details={
@@ -108,7 +109,7 @@ class BenchmarkValidator(IValidator):
             logger.error(f"BenchmarkValidator failed: {e}")
             return ValidationCampaignResult(
                 campaign_type=ValidationCampaignType.BENCHMARK,
-                metrics={"alpha": -1.0, "beta": 1.0},
+                metrics={"alpha": -1.0, "beta": 1.0, "net_return": -1.0},
                 passed=False,
                 details={"error": str(e)}
             )

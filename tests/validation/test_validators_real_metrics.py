@@ -164,7 +164,70 @@ def test_sufficient_sample_runs_the_real_bootstrap(long_uptrend_data_feed):
     # P(ruine) est une probabilité mesurée, pas la valeur sentinelle 1.0 du rejet.
     assert res_mc.details["iterations"] == 1000
     assert 0.0 <= res_mc.metrics["ruin_probability"] <= 1.0
-    assert res_mc.passed is (res_mc.metrics["ruin_probability"] < 0.05)
+    # PASS exige désormais de gagner de l'argent dans le cas central, pas
+    # seulement d'éviter la ruine (ADR 0017) : P(ruine)=0 était compatible avec
+    # une perte systématique de 37 %, et créditait quand même la campagne.
+    assert res_mc.passed is (
+        res_mc.metrics["ruin_probability"] < 0.05
+        and res_mc.metrics["median_net_return"] > 0.0
+    )
+
+def test_monte_carlo_exposes_the_real_loss_not_only_ruin(long_uptrend_data_feed):
+    """La ruine ne mesure que la queue à -50 % : la perte centrale doit être exposée.
+
+    Sans ces métriques, une stratégie perdant systématiquement sous le seuil de
+    ruine affichait P(ruine)=0.0 et rien d'autre — aucune trace chiffrée de la
+    perte réelle sur laquelle le barème puisse s'appuyer.
+    """
+    config = ValidationConfig(
+        active_campaigns=[ValidationCampaignType.MONTE_CARLO],
+        markets=[Symbol("CRASH1000", AssetClass.INDICES)],
+        timeframes=[TimeFrame.M1]
+    )
+    res_mc = MonteCarloValidator().run(
+        ChurningStrategy(), long_uptrend_data_feed, SimulatedBroker, config
+    )
+
+    assert 0.0 <= res_mc.metrics["loss_probability"] <= 1.0
+    # La queue basse ne peut pas être meilleure que le cas central.
+    assert res_mc.metrics["expected_shortfall"] <= res_mc.metrics["median_net_return"]
+
+def test_holdout_and_walk_forward_expose_net_return(uptrend_data_feed):
+    """Le barème note le PnL net réel : les campagnes doivent le rapporter.
+
+    Un `net_return` absent vaut score nul (non mesuré n'est pas neutre), donc son
+    exposition par les validateurs hors-échantillon est structurelle, pas
+    cosmétique.
+    """
+    config = ValidationConfig(
+        active_campaigns=[ValidationCampaignType.HOLD_OUT, ValidationCampaignType.WALK_FORWARD],
+        markets=[Symbol("CRASH1000", AssetClass.INDICES)],
+        timeframes=[TimeFrame.M1]
+    )
+
+    res_ho = HoldOutValidator().run(WinningStrategy(), uptrend_data_feed, SimulatedBroker, config)
+    res_wf = WalkForwardValidator().run(WinningStrategy(), uptrend_data_feed, SimulatedBroker, config)
+
+    assert "net_return" in res_ho.metrics
+    assert "net_return" in res_wf.metrics
+    assert "max_drawdown" in res_wf.metrics
+    # Long sur tendance haussière : le rendement net doit être positif.
+    assert res_ho.metrics["net_return"] > 0.0
+
+def test_walk_forward_compounds_fold_returns(uptrend_data_feed):
+    """Rendement composé, pas moyenné : un fold à -50 % ne s'annule pas avec +50 %."""
+    config = ValidationConfig(
+        active_campaigns=[ValidationCampaignType.WALK_FORWARD],
+        markets=[Symbol("CRASH1000", AssetClass.INDICES)],
+        timeframes=[TimeFrame.M1]
+    )
+    res_wf = WalkForwardValidator().run(WinningStrategy(), uptrend_data_feed, SimulatedBroker, config)
+
+    expected = 1.0
+    for fold_return in res_wf.details["fold_returns"]:
+        expected *= (1.0 + fold_return)
+
+    assert res_wf.metrics["net_return"] == pytest.approx(expected - 1.0, abs=1e-6)
 
 def test_losing_strategy_fails_benchmark_and_holdout(uptrend_data_feed):
     config = ValidationConfig(

@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Type
+from typing import Callable
 import logging
 
 from aegis_trade.domain.validation import ValidationCampaignResult
@@ -21,16 +21,19 @@ class IValidator(ABC):
         self, 
         strategy: IStrategy, 
         data_feed: IDataFeed, 
-        broker_factory: Type[IBroker], 
+        broker_factory: Callable[[], IBroker],
         config: ValidationConfig
     ) -> ValidationCampaignResult:
         """
         Exécute la campagne de validation.
-        
+
         Args:
             strategy: La stratégie à évaluer.
             data_feed: Le flux de données.
-            broker_factory: La classe/factory pour instancier un broker neuf pour chaque simulation.
+            broker_factory: Fabrique sans argument produisant un broker neuf pour
+                chaque simulation. Une fabrique (et non une classe) permet de
+                passer un broker déjà paramétré en coûts, de sorte que la
+                stratégie et l'exécution partagent le même modèle de coût.
             config: La configuration globale de validation.
             
         Returns:

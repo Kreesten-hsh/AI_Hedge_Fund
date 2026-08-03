@@ -1,5 +1,5 @@
 import logging
-from typing import Type
+from typing import Callable
 import numpy as np
 from aegis_trade.domain.validation import ValidationCampaignResult, ValidationCampaignType
 from aegis_trade.domain.strategy import IStrategy
@@ -32,7 +32,7 @@ class MonteCarloValidator(IValidator):
         self,
         strategy: IStrategy,
         data_feed: IDataFeed,
-        broker_factory: Type[IBroker],
+        broker_factory: Callable[[], IBroker],
         config: ValidationConfig
     ) -> ValidationCampaignResult:
         logger.info(f"Running MonteCarloValidator ({config.monte_carlo_iterations} iterations)...")
@@ -59,7 +59,12 @@ class MonteCarloValidator(IValidator):
                 logger.warning("MonteCarloValidator: %s.", reason)
                 return ValidationCampaignResult(
                     campaign_type=ValidationCampaignType.MONTE_CARLO,
-                    metrics={"ruin_probability": 1.0},
+                    metrics={
+                        "ruin_probability": 1.0,
+                        "median_net_return": -1.0,
+                        "loss_probability": 1.0,
+                        "expected_shortfall": -1.0,
+                    },
                     passed=False,
                     details={
                         "iterations": config.monte_carlo_iterations,
@@ -72,34 +77,58 @@ class MonteCarloValidator(IValidator):
             rng = np.random.default_rng(config.seed)
             iterations = min(config.monte_carlo_iterations, 1000)  # cap a 1000 pour rapidite
             starting_cap = backtester.initial_capital
-            
+
             ruin_count = 0
             pnl_array = np.array(trades_pnl, dtype=np.float64)
-            
-            for _ in range(iterations):
+            terminal_returns = np.empty(iterations, dtype=np.float64)
+
+            for i in range(iterations):
                 sample_pnl = rng.choice(pnl_array, size=num_trades, replace=True)
                 equity_curve = starting_cap + np.cumsum(sample_pnl)
                 if np.any(equity_curve <= (starting_cap * 0.5)):
                     ruin_count += 1
-                    
+                terminal_returns[i] = (equity_curve[-1] - starting_cap) / starting_cap
+
             ruin_prob = float(ruin_count / iterations)
-            passed = ruin_prob < 0.05
-            
+
+            # La ruine ne mesure que la queue extrême (-50 %). Une stratégie qui
+            # perd 37 % dans TOUS les tirages affiche P(ruine)=0 : ce chiffre
+            # seul faisait passer une campagne perdante. On expose donc aussi la
+            # perte centrale et la queue basse, qui sont ce qu'on subit vraiment.
+            median_net_return = float(np.median(terminal_returns))
+            loss_probability = float(np.mean(terminal_returns < 0.0))
+            expected_shortfall = float(np.mean(np.sort(terminal_returns)[: max(1, iterations // 20)]))
+
+            # PASS exige désormais de gagner de l'argent dans le cas central,
+            # pas seulement d'éviter la ruine.
+            passed = (ruin_prob < 0.05) and (median_net_return > 0.0)
+
             return ValidationCampaignResult(
                 campaign_type=ValidationCampaignType.MONTE_CARLO,
-                metrics={"ruin_probability": round(ruin_prob, 4)},
+                metrics={
+                    "ruin_probability": round(ruin_prob, 4),
+                    "median_net_return": round(median_net_return, 6),
+                    "loss_probability": round(loss_probability, 4),
+                    "expected_shortfall": round(expected_shortfall, 6),
+                },
                 passed=passed,
                 details={
                     "iterations": iterations,
                     "trades_sampled": num_trades,
                     "min_trades_required": MIN_TRADES_FOR_BOOTSTRAP,
+                    "shortfall_quantile": 0.05,
                 },
             )
         except Exception as e:
             logger.error(f"MonteCarloValidator failed: {e}")
             return ValidationCampaignResult(
                 campaign_type=ValidationCampaignType.MONTE_CARLO,
-                metrics={"ruin_probability": 1.0},
+                metrics={
+                    "ruin_probability": 1.0,
+                    "median_net_return": -1.0,
+                    "loss_probability": 1.0,
+                    "expected_shortfall": -1.0,
+                },
                 passed=False,
                 details={"error": str(e)}
             )

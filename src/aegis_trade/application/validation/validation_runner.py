@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timezone
-from typing import Dict, Type
+from typing import Callable, Dict
 
 from aegis_trade.domain.validation import (
     ValidationContext, ValidationArtifact, ValidationReport, ValidationCampaignType
@@ -44,7 +44,7 @@ class ValidationRunner:
         self,
         strategy: IStrategy,
         data_feed: IDataFeed,
-        broker_factory: Type[IBroker],
+        broker_factory: Callable[[], IBroker],
         config: ValidationConfig
     ) -> ValidationArtifact:
         

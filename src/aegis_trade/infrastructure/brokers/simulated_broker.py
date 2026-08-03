@@ -1,5 +1,6 @@
 from typing import Optional
 
+from aegis_trade.domain.costs import TransactionCostModel
 from aegis_trade.domain.execution import IBroker, OrderIntent, FillEvent
 
 class SimulatedBroker(IBroker):
@@ -14,6 +15,20 @@ class SimulatedBroker(IBroker):
         """
         self.commission_rate = commission_rate
         self.slippage_bps = slippage_bps
+
+    @property
+    def cost_model(self) -> TransactionCostModel:
+        """Coût réellement appliqué par ce broker, sous forme de concept de domaine.
+
+        Source de vérité unique : une stratégie qui dérive ses seuils d'ici
+        budgète exactement le péage qu'elle paiera dans la même simulation.
+        Recopier les chiffres à la main des deux côtés laisse silencieusement
+        diverger le seuil et le coût, et rend le backtest non concluant.
+        """
+        return TransactionCostModel(
+            commission_rate=self.commission_rate,
+            slippage_bps=self.slippage_bps,
+        )
 
     def execute_order(self, order: OrderIntent) -> Optional[FillEvent]:
         if order.quantity <= 0:

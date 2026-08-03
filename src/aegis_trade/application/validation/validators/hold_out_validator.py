@@ -1,5 +1,5 @@
 import logging
-from typing import Type
+from typing import Callable
 from aegis_trade.domain.validation import ValidationCampaignResult, ValidationCampaignType
 from aegis_trade.domain.strategy import IStrategy
 from aegis_trade.domain.ports.data_feed import IDataFeed
@@ -20,7 +20,7 @@ class HoldOutValidator(IValidator):
         self, 
         strategy: IStrategy, 
         data_feed: IDataFeed, 
-        broker_factory: Type[IBroker], 
+        broker_factory: Callable[[], IBroker],
         config: ValidationConfig
     ) -> ValidationCampaignResult:
         logger.info("Running HoldOutValidator...")
@@ -35,13 +35,21 @@ class HoldOutValidator(IValidator):
             tearsheet = backtester.run(symbol, timeframe)
             sharpe = float(tearsheet.sharpe_ratio)
             drawdown = float(tearsheet.max_drawdown)
-            
+            # Rendement net de frais réellement réalisé sur le segment de test.
+            # Le ScoringEngine note ce chiffre, pas le Sharpe : un Sharpe se
+            # calcule aussi bien sur une équité qui fond.
+            net_return = float(tearsheet.total_return)
+
             # Condition de validation réelle : Sharpe > 0.5 et drawdown < 30%
             passed = (sharpe >= 0.5) and (drawdown <= 0.30)
-            
+
             return ValidationCampaignResult(
                 campaign_type=ValidationCampaignType.HOLD_OUT,
-                metrics={"sharpe_ratio": round(sharpe, 4), "max_drawdown": round(drawdown, 4)},
+                metrics={
+                    "sharpe_ratio": round(sharpe, 4),
+                    "max_drawdown": round(drawdown, 4),
+                    "net_return": round(net_return, 6),
+                },
                 passed=passed,
                 details={"symbol": symbol.name, "timeframe": timeframe.value, "ratio": config.test_ratio}
             )
@@ -49,7 +57,7 @@ class HoldOutValidator(IValidator):
             logger.error(f"HoldOutValidator failed during execution: {e}")
             return ValidationCampaignResult(
                 campaign_type=ValidationCampaignType.HOLD_OUT,
-                metrics={"sharpe_ratio": 0.0, "max_drawdown": 1.0},
+                metrics={"sharpe_ratio": 0.0, "max_drawdown": 1.0, "net_return": -1.0},
                 passed=False,
                 details={"error": str(e)}
             )

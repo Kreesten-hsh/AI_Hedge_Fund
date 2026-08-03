@@ -36,6 +36,14 @@ from aegis_trade.providers.qlib.trainer import QlibTrainer
 SYMBOL = Symbol("CRASH1000", AssetClass.INDICES)
 ORIGIN = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
 
+# Seuils explicites pour les tests sans friction. `MLStrategy` n'a plus de seuils
+# par défaut (ADR 0018) : un défaut arbitraire était précisément ce qui avait
+# permis de lancer 325 trades sous le coût de transaction. Ces tests mesurent la
+# mécanique de signal et de sortie, pas la rentabilité, et tournent donc sur un
+# broker à friction nulle avec des seuils posés à la main.
+FRICTIONLESS_BUY_THRESHOLD = 0.0002
+FRICTIONLESS_SELL_THRESHOLD = -0.0002
+
 
 class _ListFeed(IDataFeed):
     """Flux séquentiel sur des FeatureSets en mémoire."""
@@ -262,7 +270,12 @@ class TestStrategyWiring:
     def _trained_strategy(self, closes: List[float], **kwargs: float) -> MLStrategy:
         model = ModelFactory.create_model("lightgbm", n_estimators=40, verbose=-1)
         model.fit(DatasetBuilder().build_supervised(_feature_sets(closes)))
-        return MLStrategy(predictor=QlibPredictor(model), **kwargs)
+        params: dict = {
+            "buy_threshold": FRICTIONLESS_BUY_THRESHOLD,
+            "sell_threshold": FRICTIONLESS_SELL_THRESHOLD,
+        }
+        params.update(kwargs)
+        return MLStrategy(predictor=QlibPredictor(model), **params)
 
     def test_uptrend_model_goes_long(self) -> None:
         closes = _trend(100.0, 0.002, 200)
@@ -358,7 +371,11 @@ class TestExitLogicInBacktest:
     """
 
     def _run(self, expected_returns: List[float], closes: List[float]) -> Backtester:
-        strategy = MLStrategy(predictor=QlibPredictor(_ScriptedModel(expected_returns)))
+        strategy = MLStrategy(
+            predictor=QlibPredictor(_ScriptedModel(expected_returns)),
+            buy_threshold=FRICTIONLESS_BUY_THRESHOLD,
+            sell_threshold=FRICTIONLESS_SELL_THRESHOLD,
+        )
         backtester = Backtester(
             data_feed=_ListFeed(_feature_sets(closes)),
             strategy=strategy,
@@ -446,19 +463,31 @@ class TestInferenceFailureIsNotAnExitOrder:
     """
 
     def test_failed_inference_emits_no_target_at_all(self) -> None:
-        strategy = MLStrategy(predictor=QlibPredictor(_BrokenModel(fail_from_call=0)))
+        strategy = MLStrategy(
+            predictor=QlibPredictor(_BrokenModel(fail_from_call=0)),
+            buy_threshold=FRICTIONLESS_BUY_THRESHOLD,
+            sell_threshold=FRICTIONLESS_SELL_THRESHOLD,
+        )
 
         assert strategy.generate_signals(_feature_sets([100.0])[0]) == []
 
     def test_empty_prediction_emits_no_target_at_all(self) -> None:
-        strategy = MLStrategy(predictor=QlibPredictor(_EmptyPredictionModel()))
+        strategy = MLStrategy(
+            predictor=QlibPredictor(_EmptyPredictionModel()),
+            buy_threshold=FRICTIONLESS_BUY_THRESHOLD,
+            sell_threshold=FRICTIONLESS_SELL_THRESHOLD,
+        )
 
         assert strategy.generate_signals(_feature_sets([100.0])[0]) == []
 
     def test_a_position_survives_an_inference_outage(self) -> None:
         """La position ouverte avant la panne est conservée, pas fermée."""
         closes = _trend(100.0, 0.002, 6)
-        strategy = MLStrategy(predictor=QlibPredictor(_BrokenModel(fail_from_call=1)))
+        strategy = MLStrategy(
+            predictor=QlibPredictor(_BrokenModel(fail_from_call=1)),
+            buy_threshold=FRICTIONLESS_BUY_THRESHOLD,
+            sell_threshold=FRICTIONLESS_SELL_THRESHOLD,
+        )
         backtester = Backtester(
             data_feed=_ListFeed(_feature_sets(closes)),
             strategy=strategy,
@@ -473,4 +502,83 @@ class TestInferenceFailureIsNotAnExitOrder:
     def test_non_positive_strength_scale_is_rejected(self) -> None:
         model = ModelFactory.create_model("lightgbm")
         with pytest.raises(ValueError, match="strength_scale"):
-            MLStrategy(predictor=QlibPredictor(model), strength_scale=0.0)
+            MLStrategy(
+                predictor=QlibPredictor(model),
+                buy_threshold=FRICTIONLESS_BUY_THRESHOLD,
+                sell_threshold=FRICTIONLESS_SELL_THRESHOLD,
+                strength_scale=0.0,
+            )
+
+
+class TestCostDerivedThresholds:
+    """Les seuils d'entrée se dérivent du coût de l'exécution (ADR 0018)."""
+
+    def _predictor(self) -> QlibPredictor:
+        return QlibPredictor(_ScriptedModel([0.0]))
+
+    def test_thresholds_match_the_broker_round_trip_cost(self) -> None:
+        broker = SimulatedBroker(commission_rate=0.001, slippage_bps=5.0)
+
+        strategy = MLStrategy.from_cost_model(
+            predictor=self._predictor(), cost_model=broker.cost_model
+        )
+
+        assert strategy.buy_threshold == pytest.approx(0.003)
+        assert strategy.sell_threshold == pytest.approx(-0.003)
+
+    def test_derived_threshold_dominates_the_old_hardcoded_default(self) -> None:
+        """L'ancien défaut de 2 bps était ~15x sous le coût réel de 30 bps."""
+        broker = SimulatedBroker(commission_rate=0.001, slippage_bps=5.0)
+
+        strategy = MLStrategy.from_cost_model(
+            predictor=self._predictor(), cost_model=broker.cost_model
+        )
+
+        assert strategy.buy_threshold > 10.0 * FRICTIONLESS_BUY_THRESHOLD
+
+    def test_safety_margin_widens_the_dead_zone(self) -> None:
+        broker = SimulatedBroker(commission_rate=0.001, slippage_bps=5.0)
+
+        strict = MLStrategy.from_cost_model(
+            predictor=self._predictor(), cost_model=broker.cost_model
+        )
+        margined = MLStrategy.from_cost_model(
+            predictor=self._predictor(), cost_model=broker.cost_model, safety_margin=2.0
+        )
+
+        assert margined.buy_threshold == pytest.approx(2.0 * strict.buy_threshold)
+
+    def test_a_prediction_below_the_cost_targets_flat(self) -> None:
+        """Propriété qui manquait : un mouvement qui ne paie pas son péage n'entre pas."""
+        broker = SimulatedBroker(commission_rate=0.001, slippage_bps=5.0)
+        # Rendement attendu sous le coût aller-retour, au-dessus de l'ancien défaut.
+        strategy = MLStrategy.from_cost_model(
+            predictor=QlibPredictor(_ScriptedModel([0.0005])),
+            cost_model=broker.cost_model,
+        )
+
+        signals = strategy.generate_signals(_feature_sets([100.0])[0])
+
+        assert len(signals) == 1
+        assert signals[0].direction == 0
+
+    def test_a_prediction_above_the_cost_enters(self) -> None:
+        broker = SimulatedBroker(commission_rate=0.001, slippage_bps=5.0)
+        strategy = MLStrategy.from_cost_model(
+            predictor=QlibPredictor(_ScriptedModel([0.01])),
+            cost_model=broker.cost_model,
+        )
+
+        signals = strategy.generate_signals(_feature_sets([100.0])[0])
+
+        assert len(signals) == 1
+        assert signals[0].direction == 1
+
+    def test_a_frictionless_broker_defines_no_threshold(self) -> None:
+        """Coût nul = aucune zone morte : cas de test, pas configuration d'exécution."""
+        broker = SimulatedBroker(commission_rate=0.0, slippage_bps=0.0)
+
+        with pytest.raises(ValueError, match="coût de transaction nul"):
+            MLStrategy.from_cost_model(
+                predictor=self._predictor(), cost_model=broker.cost_model
+            )

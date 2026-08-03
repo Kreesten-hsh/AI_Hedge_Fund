@@ -1,5 +1,5 @@
 import logging
-from typing import Type
+from typing import Callable
 from aegis_trade.domain.validation import ValidationCampaignResult, ValidationCampaignType
 from aegis_trade.domain.strategy import IStrategy
 from aegis_trade.domain.ports.data_feed import IDataFeed
@@ -19,7 +19,7 @@ class MultiMarketValidator(IValidator):
         self, 
         strategy: IStrategy, 
         data_feed: IDataFeed, 
-        broker_factory: Type[IBroker], 
+        broker_factory: Callable[[], IBroker],
         config: ValidationConfig
     ) -> ValidationCampaignResult:
         markets = config.markets if config.markets else [Symbol("CRASH1000", AssetClass.INDICES)]
@@ -60,7 +60,7 @@ class MultiTimeframeValidator(IValidator):
         self, 
         strategy: IStrategy, 
         data_feed: IDataFeed, 
-        broker_factory: Type[IBroker], 
+        broker_factory: Callable[[], IBroker],
         config: ValidationConfig
     ) -> ValidationCampaignResult:
         symbol = config.markets[0] if config.markets else Symbol("CRASH1000", AssetClass.INDICES)

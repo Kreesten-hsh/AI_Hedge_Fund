@@ -1,6 +1,7 @@
 from typing import List
 import logging
 
+from aegis_trade.domain.costs import TransactionCostModel
 from aegis_trade.domain.strategy import IStrategy
 from aegis_trade.domain.signal import Signal
 from aegis_trade.domain.features import FeatureSet
@@ -21,6 +22,15 @@ class MLStrategy(IStrategy):
     jamais. Les anciens seuils 0.52/0.48 étaient calibrés sur la sortie constante
     0.55 du mock LightGBM supprimé au Lot 4.
 
+    **Le seuil se dérive du coût, il ne se choisit pas.** Voir
+    `docs/ADR/0018-cost-derived-entry-thresholds.md` : un seuil sous le coût d'un
+    aller-retour rend la recherche de signal vaine par construction. Mesuré sur
+    Crash 1000, l'ancien défaut de 0.0002 valait ~15x moins que le péage réel
+    (~30 bps) — la perte de -37 % constatée était composée de commissions et de
+    slippage, pas d'erreurs de prédiction. Utiliser `from_cost_model` pour toute
+    exécution ; les seuils explicites du constructeur sont réservés aux tests
+    sans friction.
+
     **Exposition cible, pas impulsion d'entrée.** Chaque barre porte une cible
     complète : long (1), short (-1) ou PLAT (0). La zone morte n'est pas un
     silence, c'est l'ordre de sortir. C'est ce qui rend l'horizon de détention
@@ -37,8 +47,8 @@ class MLStrategy(IStrategy):
     def __init__(
         self,
         predictor: QlibPredictor,
-        buy_threshold: float = 0.0002,
-        sell_threshold: float = -0.0002,
+        buy_threshold: float,
+        sell_threshold: float,
         strength_scale: float = 0.001,
     ):
         """
@@ -46,6 +56,12 @@ class MLStrategy(IStrategy):
         :param buy_threshold: Rendement attendu au-dessus duquel on ACHÈTE.
         :param sell_threshold: Rendement attendu en-dessous duquel on VEND.
         :param strength_scale: Rendement correspondant à une conviction de 1.0.
+
+        Les seuils sont OBLIGATOIRES : l'ancienne valeur par défaut (0.0002)
+        était ~15x sous le coût d'un aller-retour réel, ce qui rendait la
+        stratégie perdante par construction sans qu'aucun appelant ait à choisir
+        ce compromis. Pour une dérivation économiquement fondée, utiliser
+        `MLStrategy.from_cost_model`.
         """
         if sell_threshold >= buy_threshold:
             raise ValueError(
@@ -60,6 +76,41 @@ class MLStrategy(IStrategy):
         self.sell_threshold = sell_threshold
         self.strength_scale = strength_scale
         self.dataset_builder = DatasetBuilder()
+
+    @classmethod
+    def from_cost_model(
+        cls,
+        predictor: QlibPredictor,
+        cost_model: TransactionCostModel,
+        safety_margin: float = 1.0,
+    ) -> "MLStrategy":
+        """Dérive les seuils du coût de transaction réel de l'exécution.
+
+        Un seuil sous le coût d'un aller-retour garantit une espérance négative :
+        le mouvement capté ne paie pas le péage engagé pour l'atteindre. Le seuil
+        de rentabilité est donc le PLANCHER de tout seuil d'entrée légitime, et
+        non un paramètre à optimiser librement.
+
+        `strength_scale` est calé à deux fois le seuil : la conviction sature
+        quand le mouvement anticipé vaut deux allers-retours, ce qui rattache le
+        dimensionnement à la même échelle économique que la décision d'entrer.
+
+        :raises ValueError: si le coût est nul. Un coût nul ne définit aucune
+            zone morte, et donc aucun seuil : c'est un cas de test, pas une
+            configuration d'exécution.
+        """
+        threshold = cost_model.breakeven_return(safety_margin=safety_margin)
+        if threshold <= 0.0:
+            raise ValueError(
+                "Un coût de transaction nul ne définit aucun seuil exploitable. "
+                "Passer des seuils explicites au constructeur pour un test sans friction."
+            )
+        return cls(
+            predictor=predictor,
+            buy_threshold=threshold,
+            sell_threshold=-threshold,
+            strength_scale=2.0 * threshold,
+        )
 
     def generate_signals(self, features: FeatureSet) -> List[Signal]:
         """

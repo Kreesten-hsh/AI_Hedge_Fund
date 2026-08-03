@@ -20,6 +20,18 @@ class MLStrategy(IStrategy):
     un mouvement d'une barre se compte en 1e-4, un seuil de 0.5 ne se déclencherait
     jamais. Les anciens seuils 0.52/0.48 étaient calibrés sur la sortie constante
     0.55 du mock LightGBM supprimé au Lot 4.
+
+    **Exposition cible, pas impulsion d'entrée.** Chaque barre porte une cible
+    complète : long (1), short (-1) ou PLAT (0). La zone morte n'est pas un
+    silence, c'est l'ordre de sortir. C'est ce qui rend l'horizon de détention
+    cohérent avec l'horizon de prédiction : le modèle ne prédit qu'une barre, il
+    ne fonde donc aucune conviction au-delà de la barre suivante.
+
+    Cette conception est sans état : la stratégie n'assure aucun suivi de la
+    position réelle, elle déclare seulement l'exposition qu'elle veut. Le
+    Backtester (et en production le Portfolio) réconcilie avec le détenu. Faire
+    suivre la position par la stratégie aurait introduit un second registre de
+    vérité, donc une désynchronisation possible avec le broker.
     """
 
     def __init__(
@@ -53,7 +65,11 @@ class MLStrategy(IStrategy):
         """
         1. Convertit le FeatureSet courant en un Dataset compréhensible par le Predictor.
         2. Invoque l'inférence.
-        3. Convertit le rendement attendu en Signal (Direction 1, -1 ou 0).
+        3. Convertit le rendement attendu en exposition cible (1, -1 ou 0).
+
+        Émet toujours exactement un signal quand l'inférence aboutit. Une liste
+        vide ne signifie plus « rester plat », elle signifie « aucune décision » —
+        réservée à l'échec d'inférence, où porter une opinion serait mentir.
         """
         # Construction d'un mini-dataset (1 ligne) pour l'inférence. Pas de label :
         # à la décision, la barre suivante n'existe pas encore.
@@ -67,24 +83,33 @@ class MLStrategy(IStrategy):
 
             expected_return = predictions[0]
 
-            direction = 0
             if expected_return >= self.buy_threshold:
                 direction = 1
             elif expected_return <= self.sell_threshold:
                 direction = -1
+            else:
+                direction = 0
 
-            if direction != 0:
+            # Une cible plate n'a pas de conviction directionnelle à porter : la
+            # quantité à fermer est celle déjà détenue, pas un dimensionnement.
+            strength = (
+                0.0
+                if direction == 0
                 # Signal.strength est un score de conviction borné [0, 1] : un
                 # rendement attendu de `strength_scale` sature la conviction.
-                strength = min(abs(expected_return) / self.strength_scale, 1.0)
-                return [Signal(
-                    symbol=features.symbol,
-                    direction=direction,
-                    strength=strength,
-                    timestamp=features.timestamp
-                )]
-            return []
+                else min(abs(expected_return) / self.strength_scale, 1.0)
+            )
+
+            return [Signal(
+                symbol=features.symbol,
+                direction=direction,
+                strength=strength,
+                timestamp=features.timestamp
+            )]
 
         except Exception as e:
+            # Sur échec, aucune cible n'est émise : le Portfolio conserve sa
+            # position. Émettre 0 ici transformerait une panne d'inférence en
+            # ordre de liquidation silencieux.
             logger.error(f"MLStrategy inference failed on symbol {features.symbol} : {e}")
             return []

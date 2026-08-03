@@ -10,18 +10,22 @@ attendu (et non d'une probabilité).
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import List
+from typing import Iterator, List
 
 import pytest
 
 from aegis_trade.application.strategy.ml_strategy import MLStrategy
 from aegis_trade.domain.core import AssetClass, Symbol, TimeFrame
 from aegis_trade.domain.features import FeatureSet
+from aegis_trade.domain.ports.data_feed import IDataFeed
+from aegis_trade.engine.backtester import Backtester
+from aegis_trade.infrastructure.brokers.simulated_broker import SimulatedBroker
 from aegis_trade.providers.qlib.dataset_builder import (
     TARGET_COLUMN,
     DatasetBuilder,
 )
 from aegis_trade.providers.qlib.model_factory import (
+    IModel,
     LightGBMModel,
     ModelFactory,
     _feature_matrix,
@@ -31,6 +35,18 @@ from aegis_trade.providers.qlib.trainer import QlibTrainer
 
 SYMBOL = Symbol("CRASH1000", AssetClass.INDICES)
 ORIGIN = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+
+
+class _ListFeed(IDataFeed):
+    """Flux séquentiel sur des FeatureSets en mémoire."""
+
+    def __init__(self, feature_sets: List[FeatureSet]) -> None:
+        self._feature_sets = feature_sets
+
+    def get_feature_stream(
+        self, symbol: Symbol, timeframe: TimeFrame
+    ) -> Iterator[FeatureSet]:
+        return iter(self._feature_sets)
 
 
 def _feature_sets(closes: List[float]) -> List[FeatureSet]:
@@ -268,12 +284,39 @@ class TestStrategyWiring:
         assert len(signals) == 1
         assert signals[0].direction == -1
 
-    def test_prediction_inside_the_dead_zone_emits_nothing(self) -> None:
-        """Sous le seuil, le rendement attendu ne couvre pas le coût : pas d'ordre."""
+    def test_prediction_inside_the_dead_zone_targets_flat(self) -> None:
+        """Sous le seuil : exposition cible nulle, donc SORTIE — pas un silence.
+
+        Rendre `[]` en zone morte laissait le Backtester porter indéfiniment la
+        dernière position : il ne ferme que sur `direction == 0`. Mesuré sur le
+        segment de test réel, 743 signaux short sans un seul long produisaient
+        1 trade sur 1 500 barres. Un signal à 0 est une décision (« sortir »),
+        l'absence de signal en est une autre (« ne rien changer »).
+        """
         closes = _trend(100.0, 0.002, 200)
         strategy = self._trained_strategy(closes, buy_threshold=10.0, sell_threshold=-10.0)
 
-        assert strategy.generate_signals(_feature_sets(closes)[-1]) == []
+        signals = strategy.generate_signals(_feature_sets(closes)[-1])
+
+        assert len(signals) == 1
+        assert signals[0].direction == 0
+        # Aucune conviction directionnelle à porter : la force d'un ordre de
+        # sortie n'a pas de sens, la quantité fermée est celle déjà détenue.
+        assert signals[0].strength == 0.0
+
+    def test_every_bar_carries_a_target_exposure(self) -> None:
+        """Chaque barre porte exactement une cible : le silence n'est plus un état.
+
+        Propriété structurelle : sans elle, le Backtester ne peut pas distinguer
+        « le modèle ne sait pas » de « le modèle veut être plat ».
+        """
+        closes = _trend(100.0, 0.002, 200)
+        strategy = self._trained_strategy(closes)
+
+        for features in _feature_sets(closes)[-20:]:
+            signals = strategy.generate_signals(features)
+            assert len(signals) == 1
+            assert signals[0].direction in (-1, 0, 1)
 
     def test_inverted_thresholds_are_rejected(self) -> None:
         model = ModelFactory.create_model("lightgbm")
@@ -283,3 +326,151 @@ class TestStrategyWiring:
                 buy_threshold=-0.001,
                 sell_threshold=0.001,
             )
+
+
+class _ScriptedModel(IModel):
+    """Modèle à prédictions scriptées, une par appel d'inférence.
+
+    Le sujet des tests ci-dessous est la SORTIE, pas la qualité du modèle. Un vrai
+    booster ne permet pas de commander la séquence conviction/zone morte dont on a
+    besoin pour prouver qu'une position se ferme : on la scripte.
+    """
+
+    def __init__(self, returns: List[float]) -> None:
+        self._returns = list(returns)
+        self._calls = 0
+
+    def fit(self, dataset: object) -> None:  # pragma: no cover - non appelé
+        raise NotImplementedError
+
+    def predict(self, dataset: object) -> List[float]:
+        value = self._returns[min(self._calls, len(self._returns) - 1)]
+        self._calls += 1
+        return [value]
+
+
+class TestExitLogicInBacktest:
+    """La sortie se prouve dans un Backtester réel, pas sur la forme du signal.
+
+    Un test qui n'observe que `direction == 0` n'aurait rien démontré : le défaut
+    corrigé ici n'était pas la forme du signal, c'était l'absence de fermeture de
+    position sur 1 500 barres.
+    """
+
+    def _run(self, expected_returns: List[float], closes: List[float]) -> Backtester:
+        strategy = MLStrategy(predictor=QlibPredictor(_ScriptedModel(expected_returns)))
+        backtester = Backtester(
+            data_feed=_ListFeed(_feature_sets(closes)),
+            strategy=strategy,
+            # Friction nulle : on mesure ici le nombre de fermetures, pas le coût.
+            broker=SimulatedBroker(commission_rate=0.0, slippage_bps=0.0),
+        )
+        backtester.run(SYMBOL, TimeFrame.M1)
+        return backtester
+
+    def test_dead_zone_closes_the_open_position(self) -> None:
+        """Conviction puis zone morte : la position doit revenir à plat."""
+        closes = _trend(100.0, 0.002, 6)
+        # Barre 0 : achat. Barres 1+ : zone morte -> sortie.
+        backtester = self._run([0.01] + [0.0] * 5, closes)
+
+        fills = [t for t in backtester.trades_history if not t.get("rejected")]
+        assert len(fills) == 2, "attendu : 1 entrée + 1 sortie"
+        assert backtester.position == 0.0
+
+    def test_a_held_position_is_not_rebought_every_bar(self) -> None:
+        """Conviction constante : une seule entrée, pas de churn barre par barre."""
+        closes = _trend(100.0, 0.002, 8)
+        backtester = self._run([0.01] * 8, closes)
+
+        fills = [t for t in backtester.trades_history if not t.get("rejected")]
+        assert len(fills) == 1
+        assert backtester.position > 0.0
+
+    def test_alternating_conviction_produces_a_usable_trade_sample(self) -> None:
+        """Le défaut de fond : 1 trade sur 1 500 barres, sous le plancher Monte-Carlo.
+
+        Sans sortie, une conviction d'un seul signe ouvrait une position et la
+        portait jusqu'au bout du segment. Avec l'exposition cible, chaque retour
+        en zone morte referme, ce qui rend l'échantillon de trades exploitable.
+        """
+        closes = _trend(100.0, 0.002, 60)
+        # Alternance conviction / zone morte : entrée, sortie, entrée, sortie...
+        backtester = self._run([0.01, 0.0] * 30, closes)
+
+        fills = [t for t in backtester.trades_history if not t.get("rejected")]
+        assert len(fills) > 30, f"échantillon encore trop maigre : {len(fills)} trades"
+
+    def test_flat_conviction_throughout_never_opens_a_position(self) -> None:
+        """Zone morte de bout en bout : aucun ordre, et surtout aucun ordre de sortie."""
+        closes = _trend(100.0, 0.002, 10)
+        backtester = self._run([0.0] * 10, closes)
+
+        assert backtester.trades_history == []
+        assert backtester.position == 0.0
+
+
+class _BrokenModel(IModel):
+    """Modèle dont l'inférence échoue à partir d'une barre donnée."""
+
+    def __init__(self, fail_from_call: int) -> None:
+        self._fail_from_call = fail_from_call
+        self._calls = 0
+
+    def fit(self, dataset: object) -> None:  # pragma: no cover - non appelé
+        raise NotImplementedError
+
+    def predict(self, dataset: object) -> List[float]:
+        self._calls += 1
+        if self._calls > self._fail_from_call:
+            raise RuntimeError("booster indisponible")
+        return [0.01]
+
+
+class _EmptyPredictionModel(IModel):
+    """Modèle qui rend une liste vide : aucune ligne prédite."""
+
+    def fit(self, dataset: object) -> None:  # pragma: no cover - non appelé
+        raise NotImplementedError
+
+    def predict(self, dataset: object) -> List[float]:
+        return []
+
+
+class TestInferenceFailureIsNotAnExitOrder:
+    """Une panne d'inférence ne doit jamais valoir ordre de liquidation.
+
+    Distinction que l'exposition cible rend critique : maintenant que `0` veut
+    dire « sortir », confondre « je ne sais pas » et « je veux être plat »
+    liquiderait le portefeuille sur une simple erreur technique.
+    """
+
+    def test_failed_inference_emits_no_target_at_all(self) -> None:
+        strategy = MLStrategy(predictor=QlibPredictor(_BrokenModel(fail_from_call=0)))
+
+        assert strategy.generate_signals(_feature_sets([100.0])[0]) == []
+
+    def test_empty_prediction_emits_no_target_at_all(self) -> None:
+        strategy = MLStrategy(predictor=QlibPredictor(_EmptyPredictionModel()))
+
+        assert strategy.generate_signals(_feature_sets([100.0])[0]) == []
+
+    def test_a_position_survives_an_inference_outage(self) -> None:
+        """La position ouverte avant la panne est conservée, pas fermée."""
+        closes = _trend(100.0, 0.002, 6)
+        strategy = MLStrategy(predictor=QlibPredictor(_BrokenModel(fail_from_call=1)))
+        backtester = Backtester(
+            data_feed=_ListFeed(_feature_sets(closes)),
+            strategy=strategy,
+            broker=SimulatedBroker(commission_rate=0.0, slippage_bps=0.0),
+        )
+        backtester.run(SYMBOL, TimeFrame.M1)
+
+        fills = [t for t in backtester.trades_history if not t.get("rejected")]
+        assert len(fills) == 1, "l'entrée seule : la panne ne doit rien fermer"
+        assert backtester.position > 0.0
+
+    def test_non_positive_strength_scale_is_rejected(self) -> None:
+        model = ModelFactory.create_model("lightgbm")
+        with pytest.raises(ValueError, match="strength_scale"):
+            MLStrategy(predictor=QlibPredictor(model), strength_scale=0.0)

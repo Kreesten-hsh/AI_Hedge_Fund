@@ -207,3 +207,99 @@ Trace des validations de politiques RL (AI-04).
   de trades exploitable, (b) alors seulement instruire la question du signal prédictif :
   features microstructure Deriv, horizon de prédiction, hyperparameter tuning.
   Phase 4 (Kronos-mini) puis Phase 5 (wiring agents) restent la trajectoire.
+
+  > **Fait le 2026-08-03** — point (a) livré, voir l'entrée suivante. Le point (b) est
+  > désormais tranché : l'échantillon est exploitable et le signal n'a pas d'edge.
+
+<!-- CHUNK-MARKER -->
+
+---
+
+## 2026-08-03 — Logique de sortie `MLStrategy` : échantillon débloqué, hypothèse tranchée
+
+- **Défaut corrigé** : `MLStrategy` ne rendait un `Signal` que sur conviction, et `[]` en zone
+  morte. Or le `Backtester` ne ferme une position que sur `direction == 0` (`backtester.py:151`) :
+  jamais émis, donc jamais de sortie. Mesuré sur le segment de test réel (1 500 barres) :
+
+  | Avant | Après |
+  |---|---|
+  | 743 signaux short, 0 long, 757 `[]` | 743 short, 757 cibles plates |
+  | **1 trade** sur 1 500 barres | **325 trades** |
+  | Position portée 1 500 barres | Fermée à chaque retour en zone morte |
+
+  Le chiffre « 17 trades » de l'entrée précédente était une estimation ; la mesure directe
+  donne **1**. La position s'ouvrait à la première barre et n'était jamais refermée.
+
+- **Correctif** : `MLStrategy` émet désormais une **exposition cible** à chaque barre — long (1),
+  short (-1) ou plat (0). La zone morte n'est plus un silence, c'est l'ordre de sortir. C'est ce
+  qui aligne l'horizon de détention sur l'horizon de prédiction : la cible est `forward_return_1`,
+  le modèle ne fonde aucune conviction au-delà de la barre suivante. Tenir 1 500 barres sur une
+  prévision à une barre n'était pas un choix, c'était un accident.
+
+  Conception **sans état** : la stratégie ne suit pas la position réelle, elle déclare seulement
+  celle qu'elle veut. Le `Backtester` (et en production le Portfolio) réconcilie. Faire suivre la
+  position par la stratégie aurait créé un second registre de vérité, donc une désynchronisation
+  possible avec le broker.
+
+  `[]` conserve un sens, désormais distinct : **échec d'inférence**. Émettre 0 sur une panne
+  transformerait une erreur technique en ordre de liquidation silencieux. Trois tests couvrent
+  ce chemin, dont un qui vérifie qu'une position ouverte survit à une panne d'inférence.
+
+- **Résultat : hypothèse REJETÉE, cette fois avec un échantillon exploitable.**
+  Artefact : `.validation_registry/val_20260803_063600_MLStrategy_score_30.json`
+  (`git_version: 448025d`, `data_hash: 847f4e3c1d7b315b`, `seed: 42`).
+  - Hold-Out : Sharpe **-7.8977**, max_drawdown 37.02% → **FAIL**
+  - Walk-Forward : Sharpe -7.9032, win_rate 0.71% (5 folds) → **FAIL**
+  - Monte-Carlo : P(ruine) 0.0 sur **325 trades** (plancher 30 franchi) → **PASS**
+  - Benchmark : Alpha -0.3784, stratégie -37.11% contre B&H +0.73% → **FAIL**
+
+- **Le score MONTE (0 → 30) pendant que la stratégie S'EFFONDRE (-1.02% → -37.11%).**
+  Ce n'est pas une contradiction, c'est une propriété du barème : le seul changement est que
+  Monte-Carlo tourne enfin (325 trades au lieu de 1) et rend PASS, ce qui vaut 10 + 20 = 30 points.
+  Le rejet global tient uniquement grâce au cap à 49 sur échec d'une campagne critique
+  (`scoring_engine.py:52-56`). **Un score de validation qui augmente quand la stratégie se dégrade
+  est un défaut de barème, à traiter — le score n'est pas encore un indicateur monotone de qualité.**
+
+- **Pourquoi Monte-Carlo passe sur une perte de 37 %** : le validateur mesure la **ruine**
+  (equity ≤ 50 % du capital initial), pas la **perte**. Rééchantillonner 325 PnL dont la somme
+  vaut -37 % donne une équité finale toujours ~-37 %, quel que soit l'ordre : le seuil de -50 %
+  n'est jamais atteint, donc P(ruine) = 0.0 est **arithmétiquement exact**. Une stratégie qui perd
+  37 % de façon fiable passe le test. C'est la même classe de défaut que le PASS creux corrigé le
+  2026-08-02 : un validateur qui rend PASS sur ce qu'un opérateur humain rejette. Non corrigé ici —
+  changer le seuil de ruine ou ajouter un critère de perte est une décision d'ADR, hors périmètre.
+
+- **Question du pouvoir prédictif : TRANCHÉE, et la réponse est non.**
+  L'entrée du 2026-08-02 retirait cette conclusion faute d'échantillon. L'échantillon existe
+  maintenant, et deux mesures indépendantes la fondent :
+
+  1. **Sans aucune friction** (commission 0, slippage 0), les mêmes 325 trades rapportent
+     **+86,82 sur 100 000**, soit +0,087 %, Sharpe **-0,0014**. L'edge brut n'est pas négatif :
+     il est **nul**. Le modèle n'a rien à exploiter, même gratuitement.
+  2. **Le seuil d'entrée est 15× sous le coût de transaction.** Entrée à 0.0002 (2 bps de rendement
+     attendu) ; aller-retour à ~30 bps (commission 10 bps × 2 + slippage 5 bps × 2). Ratio
+     **0,067×**. La stratégie paye 30 pour espérer 2 : elle est structurellement perdante quel que
+     soit le modèle branché derrière. Les -37 025 se décomposent en ~24 683 de commissions et
+     ~12 342 de slippage, sur un signal à espérance nulle.
+
+  Les seuils n'ont **pas** été ajustés pour faire remonter le score : recalibrer un seuil après
+  avoir vu le résultat du gate serait de l'ajustement au gate, pas de la recherche.
+
+- **Vérifications de santé de la base de code** :
+  - `pytest` : 446 tests passing (0 failure) — **Delta: +9 tests, 0 régression**
+  - `mypy --strict src/` : 536 erreurs (baseline: 536) — **Delta: 0**
+  - `ruff check` : 305 erreurs (baseline: 305) — **Delta: 0**
+  - Couverture `ml_strategy.py` : **100 %**
+
+- **Ce que cette entrée ne conclut pas** : que les features techniques sont sans valeur *en
+  général*. Ce qui est mesuré est précis et borné — `forward_return_1` sur CRASH1000 M1, features
+  `TechnicalFeatureExtractor`, LightGBM 300 arbres — et sur ce périmètre l'edge brut est nul.
+  Un horizon plus long, d'autres features ou un autre actif restent des hypothèses ouvertes,
+  non testées.
+
+- **Prochaines étapes, par ordre de dépendance** :
+  1. **Barème** : rendre le score monotone (une dégradation ne doit jamais faire monter le score),
+     et statuer sur le critère de perte du Monte-Carlo. Sans ça, le gate reste falsifiable.
+  2. **Coût** : tout seuil d'entrée doit être dérivé du coût de transaction, pas fixé à la main.
+     Un seuil sous le coût rend toute recherche de signal vaine par construction.
+  3. **Signal** : seulement ensuite — horizon de prédiction, features microstructure Deriv.
+  4. Phase 4 (Kronos-mini) puis Phase 5 (wiring agents) restent la trajectoire.

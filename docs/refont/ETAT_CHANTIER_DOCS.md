@@ -32,7 +32,7 @@ Correspond à la ligne `PLAN_DE_CORRECTION.md:155`.
 Principe directeur : **on ne réécrit pas l'intention, on corrige l'état déclaré.** Les documents disent
 des choses justes sur ce qu'on veut construire ; ils mentent sur ce qui existe.
 
-## 2. Avancement — Phase 3 (Qlib/LightGBM Réel) Clôturée (2026-08-02)
+## 2. Avancement — Phase 3b (Logique de sortie `MLStrategy`) Clôturée (2026-08-03)
 
 - **Lot 0 (Gates)** : ✅ TERMINÉ (413+ tests pass, mypy strict stable).
 - **Lot 1 (RiskEngine Authority)** : ✅ TERMINÉ (4 chemins de bypass fermés, RiskGate centralisé).
@@ -58,9 +58,37 @@ des choses justes sur ce qu'on veut construire ; ils mentent sur ce qui existe.
     hyperparamètres (`random_state` était effacé par tout kwarg), plancher Monte-Carlo (le PASS
     creux valait 30 points), tests de persistance `save`/`load` (aucun auparavant), artefact
     remplacé. Détail complet dans `docs/phase2/RESEARCH_LOGBOOK.md`.
-  - **Limite connue** : `MLStrategy` n'a pas de signal de sortie — 910 signaux sur 1 500 barres de
-    test ne produisent que 17 trades, et 1 seul après le sous-découpage des validateurs. Aucune
-    conclusion sur le pouvoir prédictif des features n'est tirable avant d'avoir corrigé ce point.
+  - ~~**Limite connue** : `MLStrategy` n'a pas de signal de sortie~~ → **corrigé le 2026-08-03**,
+    voir le bloc Phase 3b ci-dessous. La mesure directe donnait **1 trade** sur 1 500 barres
+    (et non 17 comme estimé) : la position s'ouvrait à la première barre et n'était jamais fermée.
+
+- **Phase 3b (Logique de sortie `MLStrategy`)** : ✅ TERMINÉ (2026-08-03).
+  - `MLStrategy` émet une **exposition cible** à chaque barre (1, -1 ou 0) au lieu d'un signal
+    seulement sur conviction. La zone morte vaut ordre de sortie ; le `Backtester` ne ferme que
+    sur `direction == 0` (`backtester.py:151`), jamais émis auparavant. Conception sans état :
+    la stratégie déclare l'exposition voulue, le Portfolio réconcilie — pas de second registre
+    de vérité face au broker.
+  - `[]` reste réservé à l'**échec d'inférence** : émettre 0 sur une panne transformerait une
+    erreur technique en ordre de liquidation silencieux. 3 tests couvrent ce chemin.
+  - **Effet mesuré : 1 trade → 325 trades** sur le segment de test, plancher Monte-Carlo franchi.
+  - **Résultat de validation : score 30/100, REJETÉ.** Artefact
+    `.validation_registry/val_20260803_063600_MLStrategy_score_30.json` (`git_version: 448025d`).
+    Hold-Out Sharpe -7.90, Walk-Forward Sharpe -7.90, Benchmark alpha -0.3784 : FAIL.
+    Monte-Carlo PASS (P(ruine) 0.0 sur 325 trades).
+  - **Deux défauts de gate relevés, NON corrigés** (décisions d'ADR, hors périmètre) :
+    1. **Le score monte (0 → 30) pendant que la stratégie s'effondre (-1.02 % → -37.11 %).**
+       Seul changement : Monte-Carlo tourne enfin et vaut 30 points. Le rejet ne tient que par
+       le cap à 49 sur campagne critique (`scoring_engine.py:52-56`). Un score non monotone
+       reste falsifiable.
+    2. **Monte-Carlo mesure la ruine (-50 %), pas la perte.** Perdre 37 % de façon fiable passe
+       le test — P(ruine) = 0.0 est arithmétiquement exact. Même classe de défaut que le PASS
+       creux corrigé la veille.
+  - **Pouvoir prédictif des features : tranché, réponse non.** Sans friction, les 325 trades
+    rapportent +86,82 sur 100 000 (Sharpe -0,0014) : edge brut **nul**, pas négatif. Et le seuil
+    d'entrée (2 bps) est **15× sous** le coût aller-retour (~30 bps), ratio 0,067× — perdante par
+    construction quel que soit le modèle. Seuils **non** ajustés après lecture du gate.
+  - Gates : pytest **446** (+9, 0 régression), mypy **536** (inchangé), ruff **305** (inchangé),
+    couverture `ml_strategy.py` **100 %**.
 
 | # | Fichier | Traitement appliqué |
 |---|---|---|

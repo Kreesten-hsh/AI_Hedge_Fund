@@ -1,0 +1,100 @@
+{
+    "context": {
+        "seed": 42,
+        "git_version": "448025d",
+        "strategy_version": "MLStrategy",
+        "config_version": "v1",
+        "data_hash": "847f4e3c1d7b315b",
+        "timestamp": "2026-08-03T06:36:00.721887+00:00"
+    },
+    "report": {
+        "campaigns": [
+            {
+                "campaign_type": "hold_out",
+                "metrics": {
+                    "sharpe_ratio": -7.8977,
+                    "max_drawdown": 0.3702
+                },
+                "passed": false,
+                "details": {
+                    "symbol": "CRASH1000",
+                    "timeframe": "M1",
+                    "ratio": 0.2
+                }
+            },
+            {
+                "campaign_type": "walk_forward",
+                "metrics": {
+                    "sharpe_ratio": -7.9032,
+                    "win_rate": 0.0071
+                },
+                "passed": false,
+                "details": {
+                    "symbol": "CRASH1000",
+                    "timeframe": "M1",
+                    "folds_evaluated": 5
+                }
+            },
+            {
+                "campaign_type": "monte_carlo",
+                "metrics": {
+                    "ruin_probability": 0.0
+                },
+                "passed": true,
+                "details": {
+                    "iterations": 1000,
+                    "trades_sampled": 325,
+                    "min_trades_required": 30
+                }
+            },
+            {
+                "campaign_type": "benchmark",
+                "metrics": {
+                    "alpha": -0.3784,
+                    "beta": -0.5646,
+                    "strategy_sharpe": -7.8977,
+                    "benchmark_sharpe": 0.2946
+                },
+                "passed": false,
+                "details": {
+                    "benchmarks_run": [
+                        "buy_and_hold"
+                    ],
+                    "strategy_return": -0.3711,
+                    "benchmark_return": 0.0073
+                }
+            }
+        ],
+        "strategy_score": 30.0,
+        "is_approved": false
+    },
+    "parameters": {
+        "config": {
+            "active_campaigns": [
+                "hold_out",
+                "walk_forward",
+                "monte_carlo",
+                "benchmark"
+            ],
+            "seed": 42,
+            "train_ratio": 0.6,
+            "val_ratio": 0.2,
+            "test_ratio": 0.2,
+            "monte_carlo_iterations": 10000,
+            "monte_carlo_level": 1,
+            "markets": [
+                {
+                    "name": "CRASH1000",
+                    "asset_class": "indices"
+                }
+            ],
+            "timeframes": [
+                "M1"
+            ],
+            "benchmarks": [
+                "buy_and_hold",
+                "random"
+            ]
+        }
+    }
+}

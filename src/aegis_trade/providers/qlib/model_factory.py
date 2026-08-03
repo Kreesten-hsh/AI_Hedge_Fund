@@ -2,7 +2,7 @@ import json
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -114,19 +114,26 @@ class LightGBMModel(IModel):
     réactivé au Lot 5 après upgrade de mlflow.
     """
 
+    # Hyperparamètres de référence. Un appelant qui surcharge `n_estimators` ne
+    # doit pas perdre `random_state` au passage : les kwargs sont FUSIONNÉS sur
+    # cette base, jamais substitués. Un `kwargs or {...}` rendait ces valeurs
+    # mortes dès le premier argument nommé — dont la graine, ce qui cassait
+    # silencieusement la reproductibilité que l'artefact de validation affirme.
+    DEFAULT_PARAMS = {
+        "objective": "regression",
+        "metric": "rmse",
+        "n_estimators": 300,
+        "learning_rate": 0.05,
+        "num_leaves": 31,
+        "min_child_samples": 20,
+        "subsample": 0.8,
+        "colsample_bytree": 0.8,
+        "random_state": 42,
+        "verbose": -1,
+    }
+
     def __init__(self, **kwargs: Any) -> None:
-        self.params = kwargs or {
-            "objective": "regression",
-            "metric": "rmse",
-            "n_estimators": 300,
-            "learning_rate": 0.05,
-            "num_leaves": 31,
-            "min_child_samples": 20,
-            "subsample": 0.8,
-            "colsample_bytree": 0.8,
-            "random_state": 42,
-            "verbose": -1,
-        }
+        self.params: Dict[str, Any] = {**self.DEFAULT_PARAMS, **kwargs}
         self._model: Any = None
         self._feature_cols: List[str] = []
 
@@ -151,7 +158,9 @@ class LightGBMModel(IModel):
             lgb_train,
             num_boost_round=int(self.params.get("n_estimators", 300)),
         )
-        logger.info("LightGBM entraîné sur %d lignes, %d features.", len(X), len(self._feature_cols))
+        logger.info(
+            "LightGBM entraîné sur %d lignes, %d features.", len(X), len(self._feature_cols)
+        )
 
     def predict(self, dataset: QlibDataset) -> List[float]:
         if self._model is None:

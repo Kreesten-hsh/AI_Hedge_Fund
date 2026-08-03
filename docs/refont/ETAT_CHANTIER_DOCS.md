@@ -47,8 +47,20 @@ des choses justes sur ce qu'on veut construire ; ils mentent sur ce qui existe.
   - `DatasetBuilder.build_supervised()` construit le label `forward_return_1` (shift(-1) rendement).
   - `MLStrategy` recalibrée en seuils de rendement (0.0002/-0.0002).
   - Script `train_qlib_model.py` complet : load → features → split chrono → train → validation → export conditionnel.
-  - 14 tests réels dans `test_qlib_adapter.py` (label leakage, real training, strategy wiring).
-  - **Résultat de validation : score 30/100, REJETÉ.** Résultat scientifiquement correct (rejet propre = succès du pipeline).
+  - 19 tests réels dans `test_qlib_adapter.py` (label leakage, real training, hyperparamètres, persistance save/load, strategy wiring).
+  - `MonteCarloValidator` : plancher `MIN_TRADES_FOR_BOOTSTRAP = 30`. Un bootstrap sur moins de
+    30 trades est déclaré non concluant (`passed=False`) au lieu de renvoyer un PASS creux.
+  - **Résultat de validation : score 0/100, REJETÉ** — les 4 campagnes échouent.
+    Artefact : `.validation_registry/val_20260803_052640_MLStrategy_score_0.json` (`git_version: eef6a00`).
+    Résultat scientifiquement correct (rejet propre = succès du pipeline).
+  - **Audit de clôture** : la première clôture annonçait 30/100 sur un artefact produit au commit
+    de Phase 2 (`b8210a9`), donc non reproductible. Quatre défauts corrigés : fusion des
+    hyperparamètres (`random_state` était effacé par tout kwarg), plancher Monte-Carlo (le PASS
+    creux valait 30 points), tests de persistance `save`/`load` (aucun auparavant), artefact
+    remplacé. Détail complet dans `docs/phase2/RESEARCH_LOGBOOK.md`.
+  - **Limite connue** : `MLStrategy` n'a pas de signal de sortie — 910 signaux sur 1 500 barres de
+    test ne produisent que 17 trades, et 1 seul après le sous-découpage des validateurs. Aucune
+    conclusion sur le pouvoir prédictif des features n'est tirable avant d'avoir corrigé ce point.
 
 | # | Fichier | Traitement appliqué |
 |---|---|---|

@@ -7,7 +7,9 @@ insuffisantes ou désalignées, et la direction du signal issue d'un rendement
 attendu (et non d'une probabilité).
 """
 
+import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import List
 
 import pytest
@@ -19,7 +21,11 @@ from aegis_trade.providers.qlib.dataset_builder import (
     TARGET_COLUMN,
     DatasetBuilder,
 )
-from aegis_trade.providers.qlib.model_factory import ModelFactory, _feature_matrix
+from aegis_trade.providers.qlib.model_factory import (
+    LightGBMModel,
+    ModelFactory,
+    _feature_matrix,
+)
 from aegis_trade.providers.qlib.predictor import QlibPredictor
 from aegis_trade.providers.qlib.trainer import QlibTrainer
 
@@ -166,6 +172,74 @@ class TestRealTraining:
     def test_unsupported_model_is_rejected(self) -> None:
         with pytest.raises(ValueError, match="not supported"):
             ModelFactory.create_model("transformer")
+
+
+class TestHyperparameters:
+    def test_defaults_are_kept_when_overriding_one_param(self) -> None:
+        """Surcharger `n_estimators` ne doit pas effacer la graine.
+
+        Un `kwargs or {defaults}` rendait tous les hyperparamètres morts dès le
+        premier argument nommé — dont `random_state`, alors que l'artefact de
+        validation enregistre `seed: 42` en affirmant la reproductibilité.
+        """
+        model = ModelFactory.create_model("lightgbm", n_estimators=42)
+
+        assert isinstance(model, LightGBMModel)
+        assert model.params["n_estimators"] == 42
+        assert model.params["random_state"] == 42
+        assert model.params["objective"] == "regression"
+        assert model.params["learning_rate"] == 0.05
+
+    def test_defaults_are_not_mutated_across_instances(self) -> None:
+        """La surcharge d'une instance ne contamine pas la suivante."""
+        ModelFactory.create_model("lightgbm", learning_rate=0.9)
+
+        assert ModelFactory.create_model("lightgbm").params["learning_rate"] == 0.05
+
+
+class TestPersistence:
+    def test_save_then_load_predicts_identically(self, tmp_path: Path) -> None:
+        """Un modèle rechargé doit prédire exactement comme l'original.
+
+        C'est le chemin d'export du pipeline (`train_qlib_model.py`) : un booster
+        rechargé qui dérive, ne serait-ce que d'un epsilon, invaliderait tout
+        artefact de validation produit avant l'export.
+        """
+        closes = _trend(100.0, 0.002, 200)
+        dataset = DatasetBuilder().build_supervised(_feature_sets(closes))
+        model = ModelFactory.create_model("lightgbm", n_estimators=40, verbose=-1)
+        model.fit(dataset)
+        expected = model.predict(dataset)
+
+        target = tmp_path / "models" / "lightgbm_test.txt"
+        model.save(str(target))
+        reloaded = LightGBMModel.load(str(target))
+
+        assert target.exists()
+        assert reloaded.predict(dataset) == pytest.approx(expected)
+
+    def test_save_persists_the_feature_contract(self, tmp_path: Path) -> None:
+        """Les noms de colonnes voyagent avec le booster, sinon désalignement muet."""
+        dataset = DatasetBuilder().build_supervised(_feature_sets(_trend(100.0, 0.002, 200)))
+        model = ModelFactory.create_model("lightgbm", n_estimators=20, verbose=-1)
+        model.fit(dataset)
+
+        target = tmp_path / "lightgbm_test.txt"
+        model.save(str(target))
+        sidecar = json.loads(target.with_suffix(".txt.meta.json").read_text(encoding="utf-8"))
+
+        assert sidecar["feature_cols"] == LightGBMModel.load(str(target))._feature_cols
+        assert TARGET_COLUMN not in sidecar["feature_cols"]
+        assert "close_price" not in sidecar["feature_cols"]
+        # La graine voyage aussi : un modèle rechargé et réentraîné doit repartir
+        # des mêmes hyperparamètres que l'original.
+        assert sidecar["params"]["random_state"] == 42
+
+    def test_saving_an_untrained_model_is_refused(self, tmp_path: Path) -> None:
+        model = ModelFactory.create_model("lightgbm")
+
+        with pytest.raises(RuntimeError, match="trained"):
+            model.save(str(tmp_path / "never_fitted.txt"))
 
 
 class TestStrategyWiring:

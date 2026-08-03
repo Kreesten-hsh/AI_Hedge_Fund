@@ -147,12 +147,36 @@ Trace des validations de politiques RL (AI-04).
   (return_*, ema_*, rsi, macd, atr, bb_*) avec cible `forward_return_1` (rendement barre suivante)
   peut-il surperformer un benchmark Buy & Hold sur Crash 1000 M1 ?
 
-- **Résultat : REJETÉ (score 30/100, is_approved=false).** C'est un résultat scientifiquement correct.
+- **Résultat : REJETÉ (score 0/100, is_approved=false).** C'est un résultat scientifiquement correct.
   Le pipeline de validation fonctionne exactement comme prévu : il a rejeté une hypothèse faible.
-  - Hold-Out : Sharpe -0.39, max_drawdown 1.8% → **FAIL**
-  - Walk-Forward : Sharpe -0.69, win_rate 0.0% (5 folds) → **FAIL**
-  - Monte-Carlo : P(ruine) 0.0% (1 seul trade échantillonné) → **PASS**
-  - Benchmark : Alpha -0.0173, Beta -1.006 → **FAIL**
+  Artefact de référence : `.validation_registry/val_20260803_052640_MLStrategy_score_0.json`
+  (`git_version: eef6a00`, `data_hash: 847f4e3c1d7b315b`, `seed: 42`).
+  - Hold-Out : Sharpe -0.3983, max_drawdown 1.67% → **FAIL**
+  - Walk-Forward : Sharpe -0.6948, win_rate 0.0% (5 folds) → **FAIL**
+  - Monte-Carlo : échantillon insuffisant (1 trade < 30 requis), non concluant → **FAIL**
+  - Benchmark : Alpha -0.0175, Beta -0.986 (stratégie -1.02% contre B&H +0.73%) → **FAIL**
+
+  Métriques d'ajustement **in-sample** sur les 3 500 barres d'entraînement (à ne PAS lire comme
+  une validation) : RMSE 1.804e-4, MAE 8.287e-5, directional_accuracy 0.7316. L'écart entre
+  cette précision directionnelle in-sample et un win_rate out-of-sample de 0.0% est la signature
+  d'un surajustement : le modèle mémorise le segment d'entraînement et ne généralise pas.
+
+- **Correctifs d'audit appliqués après première clôture** (la clôture initiale annonçait
+  30/100 sur un artefact non reproductible ; les quatre défauts sont corrigés) :
+  1. `LightGBMModel.__init__` faisait `self.params = kwargs or {defaults}` : tout argument nommé
+     effaçait les hyperparamètres documentés, **dont `random_state: 42`**. Le pipeline tournait donc
+     sans graine fixée alors que l'artefact enregistrait `seed: 42`. Corrigé en fusion
+     (`{**DEFAULT_PARAMS, **kwargs}`), couvert par 2 tests.
+  2. `MonteCarloValidator` ne rejetait que `trades == 0`. Un bootstrap sur 1 trade renvoyait
+     P(ruine)=0.0 et un **PASS creux qui gonflait le score de 0 à 30**. Plancher
+     `MIN_TRADES_FOR_BOOTSTRAP = 30` ajouté : sous ce seuil le résultat est non concluant, donc
+     `passed=False`. C'est la seule cause de l'écart de score entre les deux clôtures.
+  3. `LightGBMModel.save()` / `load()` n'avaient aucun test et n'avaient jamais été exécutés
+     (le chemin d'export n'est atteint que par un modèle approuvé). 3 tests ajoutés dont un
+     round-trip fit → save → load → predict identique.
+  4. L'artefact commité portait `git_version: b8210a9` (commit de Phase 2) : il avait été produit
+     avant la fin du code de Phase 3 et ses métriques ne correspondaient pas au code livré.
+     Supprimé et remplacé par un artefact reproductible (deux exécutions consécutives identiques).
 
 - **Composants créés/réécrits** :
   1. `scripts/train_qlib_model.py` : Pipeline complète (load parquet → features → split chrono 70/30 → train LightGBM → validation 4 campagnes → export conditionnel).
@@ -160,16 +184,26 @@ Trace des validations de politiques RL (AI-04).
   3. `providers/qlib/dataset_builder.py` : `build_supervised()` calcule le vrai label `forward_return_1` via `price.shift(-1) / price - 1`.
   4. `providers/qlib/trainer.py` : Métriques réelles (RMSE, MAE, directional_accuracy).
   5. `application/strategy/ml_strategy.py` : Seuils en rendement (0.0002/-0.0002) au lieu de probabilité (ancien mock 0.52/0.48).
-  6. `tests/providers/qlib/test_qlib_adapter.py` : 14 tests réels couvrant label leakage, real training, strategy wiring, et rejets bruyants.
+  6. `tests/providers/qlib/test_qlib_adapter.py` : 19 tests réels couvrant label leakage, real training, hyperparamètres, persistance et strategy wiring.
+  7. `application/validation/validators/monte_carlo_validator.py` : plancher d'échantillon du bootstrap.
 
 - **Décision architecturale** : LightGBM-direct est un contournement temporaire (mlflow 1.27.0 incompatible avec qlib 0.9.7). Retour à `qlib.init()` standard au Lot 5 après upgrade mlflow.
 
 - **Vérifications de santé de la base de code** :
-  - `pytest` : 430 tests passing (0 failure) — **Delta: +13 tests Qlib, 0 régression**
+  - `pytest` : 437 tests passing (0 failure) — **Delta: +20 tests (13 Qlib + 5 persistance/hyperparams + 2 plancher MC), 0 régression**
   - `mypy --strict src/` : 536 erreurs (baseline: 537) — **Delta: -1 (amélioration)**
   - `ruff check` : 305 erreurs (baseline: 308) — **Delta: -3 (amélioration)**
 
-- **Prochaine étape** : Le rejet du modèle baseline est normal — les features techniques standard
-  sur du M1 synthétique n'ont pas assez de signal prédictif. Les axes d'amélioration sont :
-  (a) features microstructure spécifiques aux synthétiques Deriv, (b) horizon de prédiction ajusté,
-  (c) hyperparameter tuning. Mais d'abord, Phase 4 (Kronos-mini) puis Phase 5 (wiring agents).
+- **Limite de mesure à lever avant toute conclusion sur les features** : sur les 1 500 barres du
+  segment de test, `MLStrategy` émet 910 signaux mais le backtest ne produit que 17 trades — et
+  le sous-découpage interne des validateurs (hold-out à 0.2 sur un segment déjà réduit à 30%)
+  ramène Monte-Carlo à 1 seul trade. `MLStrategy` n'émet aucun signal de sortie : les positions ne
+  sont pas gérées, ce qui rend l'échantillon de trades trop maigre pour un bootstrap.
+  **On ne peut donc PAS conclure de cette campagne que les features techniques manquent de signal
+  prédictif** — la conclusion de la première clôture allait trop loin. Le rejet est valide (Sharpe
+  négatif sur 3 campagnes indépendantes), son diagnostic ne l'est pas encore.
+
+- **Prochaine étape** : (a) doter `MLStrategy` d'une logique de sortie pour obtenir un échantillon
+  de trades exploitable, (b) alors seulement instruire la question du signal prédictif :
+  features microstructure Deriv, horizon de prédiction, hyperparameter tuning.
+  Phase 4 (Kronos-mini) puis Phase 5 (wiring agents) restent la trajectoire.

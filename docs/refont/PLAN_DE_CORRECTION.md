@@ -17,7 +17,8 @@
 Lot 0 ✅ ──► Lot 1 ✅ ──► Lot 2 (Complété: Sourcing Réel) ✅ ──► Lot 4 (Validateurs Réels) ✅
                          │
                          └──► Intégration Qlib/Kronos Réelle (Phases 3-6)
-                                   │
+                                   │  Phase 3 (Qlib/LightGBM réel) ✅ — modèle REJETÉ 0/100,
+                                   │  rejet propre = critère de sortie du Lot 4 rempli
                                    ▼
                          [Démo Fonctionnelle]
                                    │
@@ -137,7 +138,7 @@ Objectif : que le mot « validé » redevienne vrai. Couvre P2.
 | Exécuter le `Backtester` construit à `hold_out_validator.py:32` et jamais lancé | idem |
 | Traçabilité réelle : `git_version` depuis `git rev-parse`, `data_hash` depuis un hash du dataset | `validation_runner.py:57,60` |
 | Aligner les seuils code/doc : `benchmark_gate.py:14-15` (`0.85`/`2.0`) contre `VALIDATION_PIPELINE_REPORT.md:16` (`0.55`/`1.2`). **Décider lequel fait foi et documenter la décision en ADR** | `engine/benchmark_gate.py`, doc |
-| Décider de Qlib : soit `import qlib` réel consommant le `FeatureStore`, soit suppression de la façade (`LightGBMModelMock`, `mock_loss`, `bootstrap.py:17-18`) | `providers/qlib/` |
+| ✅ **TRANCHÉ (Phase 3, 2026-08-02)** — Décider de Qlib : soit `import qlib` réel consommant le `FeatureStore`, soit suppression de la façade (`LightGBMModelMock`, `mock_loss`, `bootstrap.py:17-18`). **Décision : façade supprimée, entraînement réel via `lightgbm.train()` sur le `FeatureStore`.** `LightGBMModelMock` et `mock_loss` n'existent plus (grep vide). `qlib.init()` reste inatteignable tant que `mlflow 1.27.0` est installé : contournement LightGBM-direct assumé, levé au Lot 5. | `providers/qlib/` |
 | Décider de Kronos : brancher un vrai `data_provider` (`kronos_adapter.py:40-41,63-71` prédit sur `np.random.randn`) ou marquer le module explicitement inactif | `providers/kronos/` |
 | Remplacer `MockReasoner()` par `OllamaReasoner` en production, ou assumer le mock par configuration explicite | `api/deps.py:53` |
 | Entrée RL réelle au lieu de `np.zeros(30)` | `orchestrator.py:97` |
@@ -206,7 +207,7 @@ Les 21 bloquants de `AUDIT_COMPLET_2026-07-31.md:§10` sont tous assignés.
 | 11 — zéro test d'API, ratio 0,40 | P1 | **1** (API) + **6** (reste) |
 | 12 — 6 validateurs `passed=True` codé en dur | P2 | **4** |
 | 13 — traçabilité falsifiée (`v1.0.0-mock`) | P2 | **4** |
-| 14 — Qlib façade (`LightGBMModelMock`) | P2 | **4** |
+| 14 — Qlib façade (`LightGBMModelMock`) | P2 | **4** ✅ résolu Phase 3 |
 | 15 — aucune donnée réelle, runner mort | P2 | **2** |
 | 16 — duplications numériques (ATR, PnL, equity) | P3 | **3** |
 | 17 — Kronos vendoré sans LICENSE | P3 | **5** |

@@ -1,19 +1,19 @@
 {
     "context": {
         "seed": 42,
-        "git_version": "b8210a9",
+        "git_version": "eef6a00",
         "strategy_version": "MLStrategy",
         "config_version": "v1",
         "data_hash": "847f4e3c1d7b315b",
-        "timestamp": "2026-08-02T17:44:54.364395+00:00"
+        "timestamp": "2026-08-03T05:26:40.692515+00:00"
     },
     "report": {
         "campaigns": [
             {
                 "campaign_type": "hold_out",
                 "metrics": {
-                    "sharpe_ratio": -0.3938,
-                    "max_drawdown": 0.018
+                    "sharpe_ratio": -0.3983,
+                    "max_drawdown": 0.0167
                 },
                 "passed": false,
                 "details": {
@@ -25,7 +25,7 @@
             {
                 "campaign_type": "walk_forward",
                 "metrics": {
-                    "sharpe_ratio": -0.6896,
+                    "sharpe_ratio": -0.6948,
                     "win_rate": 0.0
                 },
                 "passed": false,
@@ -38,20 +38,22 @@
             {
                 "campaign_type": "monte_carlo",
                 "metrics": {
-                    "ruin_probability": 0.0
+                    "ruin_probability": 1.0
                 },
-                "passed": true,
+                "passed": false,
                 "details": {
-                    "iterations": 1000,
-                    "trades_sampled": 1
+                    "iterations": 10000,
+                    "trades_count": 1,
+                    "min_trades_required": 30,
+                    "reason": "\u00c9chantillon insuffisant : 1 trades < 30 requis, r\u00e9sultat non concluant"
                 }
             },
             {
                 "campaign_type": "benchmark",
                 "metrics": {
-                    "alpha": -0.0173,
-                    "beta": -1.006,
-                    "strategy_sharpe": -0.3938,
+                    "alpha": -0.0175,
+                    "beta": -0.986,
+                    "strategy_sharpe": -0.3983,
                     "benchmark_sharpe": 0.2946
                 },
                 "passed": false,
@@ -59,12 +61,12 @@
                     "benchmarks_run": [
                         "buy_and_hold"
                     ],
-                    "strategy_return": -0.01,
+                    "strategy_return": -0.0102,
                     "benchmark_return": 0.0073
                 }
             }
         ],
-        "strategy_score": 30.0,
+        "strategy_score": 0.0,
         "is_approved": false
     },
     "parameters": {

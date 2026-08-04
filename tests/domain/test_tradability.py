@@ -11,6 +11,7 @@ from aegis_trade.domain.costs import TransactionCostModel
 from aegis_trade.domain.tradability import (
     absolute_moves,
     is_horizon_tradable,
+    max_viable_round_trip_cost,
     tradable_window_ratio,
 )
 
@@ -114,3 +115,75 @@ class TestHorizonVerdict:
         """Un min_ratio de 0 rendrait tout horizon « tradable » par vacuité."""
         with pytest.raises(ValueError, match="min_ratio"):
             is_horizon_tradable([100.0, 101.0], 1, COST, min_ratio=min_ratio)
+
+
+class TestMaxViableRoundTripCost:
+    """Borne de coût indépendante de toute hypothèse de frais.
+
+    Motivation mesurée : le catalogue d'offres Deriv est vide depuis cet
+    environnement, donc le spread réel de Crash 1000 n'est pas lisible par API.
+    Choisir l'horizon cible à partir des 30 bps du `SimulatedBroker` reviendrait
+    à bâtir la recherche sur un chiffre non mesuré. Cette borne renverse la
+    question et ne dépend d'aucun coût.
+    """
+
+    # Mouvements tous distincts et jamais nuls (7 est premier avec 13, donc les
+    # résidus consécutifs ne se répètent pas) : la borne est isolable sans que
+    # des ex aequo au point de coupure rendent le test ambigu.
+    PRICES = [100.0 * (1.0 + 0.001 * ((i * 7) % 13)) for i in range(60)]
+
+    @staticmethod
+    def _cost_of(round_trip: float) -> TransactionCostModel:
+        """Modèle dont l'aller-retour vaut exactement `round_trip`."""
+        return TransactionCostModel(commission_rate=round_trip / 2.0, slippage_bps=0.0)
+
+    @pytest.mark.parametrize("min_ratio", [0.05, 0.2, 0.5, 1.0])
+    def test_the_bound_delivers_the_ratio_it_promises(self, min_ratio: float) -> None:
+        """Inversion : le coût rendu tient bien la part de fenêtres exigée."""
+        bound = max_viable_round_trip_cost(self.PRICES, horizon=1, min_ratio=min_ratio)
+
+        ratio = tradable_window_ratio(self.PRICES, 1, self._cost_of(bound))
+
+        assert ratio >= min_ratio
+
+    @pytest.mark.parametrize("min_ratio", [0.05, 0.2, 0.5])
+    def test_a_cost_above_the_bound_breaks_the_promise(self, min_ratio: float) -> None:
+        """La borne est serrée, pas seulement suffisante.
+
+        Sans cette contre-épreuve, retourner zéro passerait le test d'inversion
+        tout en étant inutile.
+        """
+        bound = max_viable_round_trip_cost(self.PRICES, horizon=1, min_ratio=min_ratio)
+
+        ratio = tradable_window_ratio(self.PRICES, 1, self._cost_of(bound * 1.000001))
+
+        assert ratio < min_ratio
+
+    def test_demanding_every_window_selects_the_smallest_move(self) -> None:
+        """À 100 % de fenêtres, seul le mouvement le plus faible est finançable."""
+        moves = absolute_moves(self.PRICES, horizon=1)
+
+        bound = max_viable_round_trip_cost(self.PRICES, horizon=1, min_ratio=1.0)
+
+        assert bound == pytest.approx(min(moves))
+
+    def test_demanding_more_windows_lowers_the_affordable_cost(self) -> None:
+        """Monotonie : exiger plus d'occasions ne peut pas relâcher la contrainte."""
+        lenient = max_viable_round_trip_cost(self.PRICES, horizon=1, min_ratio=0.10)
+        strict = max_viable_round_trip_cost(self.PRICES, horizon=1, min_ratio=0.90)
+
+        assert strict <= lenient
+
+    def test_a_longer_horizon_affords_a_higher_cost(self) -> None:
+        """Le fait qui rouvre l'hypothèse de l'ADR 0019 : tenir plus longtemps paie."""
+        prices = [100.0 * (1.0005**i) for i in range(60)]
+
+        short = max_viable_round_trip_cost(prices, horizon=1, min_ratio=0.5)
+        long = max_viable_round_trip_cost(prices, horizon=30, min_ratio=0.5)
+
+        assert long > short
+
+    @pytest.mark.parametrize("min_ratio", [0.0, -0.1, 1.5])
+    def test_an_out_of_range_min_ratio_is_refused(self, min_ratio: float) -> None:
+        with pytest.raises(ValueError, match="min_ratio"):
+            max_viable_round_trip_cost(self.PRICES, 1, min_ratio=min_ratio)

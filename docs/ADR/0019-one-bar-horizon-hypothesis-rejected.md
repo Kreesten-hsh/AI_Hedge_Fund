@@ -71,6 +71,16 @@ En une barre M1, on capte un tick ou rien. Tout coût aller-retour supérieur à
 ~0.6 bps élimine donc l'horizon 1 barre, quel que soit le broker. Le résultat est
 robuste, pas conditionnel à une hypothèse de frais.
 
+> **CORRIGÉ par l'ADR 0020 — l'explication ci-dessus est fausse, le verdict tient.**
+> L'incrément de prix mesuré vaut 0.001 sur ~5728, soit **0.0017 bps par tick**,
+> pas 0.6 : un mouvement médian de 0.61 bps fait ~350 ticks, et la quantification
+> n'explique rien. La vraie cause est que la distribution à 1 barre est
+> quasi-dégénérée (médiane 0.606 bps, p95 0.761 bps) — presque toutes les barres
+> bougent de la même petite quantité, d'où le saut de part et d'autre de 0.6.
+> La conclusion « tout coût A/R au-dessus de ~0.6 bps élimine l'horizon 1 barre »
+> reste exacte et est confirmée indépendamment par le budget mesuré en ADR 0020
+> (0.60-0.69 bps à 1 minute). Ne pas réutiliser l'argument de quantification.
+
 ### 3. Le mouvement ne dépasse le coût qu'à un horizon bien plus long
 
 | Horizon | \|médiane\| | % fenêtres > 30 bps |

@@ -24,7 +24,7 @@ OUTPUT_DIR = "data/market_data"
 
 def fetch_deriv_data():
     client = DerivHistoricalData()
-    
+
     # 1. Crash 1000 Index (CRASH1000)
     symbol_name_crash = "CRASH1000"
     out_filename_crash = "crash1000.parquet"
@@ -37,6 +37,26 @@ def fetch_deriv_data():
             logger.info(f"SECURITY CHECK: Symbol requested '{symbol_name_crash}' verified -> Saved {len(crash_df)} rows to {out_path}")
     except Exception as e:
         logger.error(f"Failed to fetch Crash 1000 data: {e}")
+
+    # 1b. Crash 1000 en M15 — route retenue par l'ADR 0020 pour DATA-01.
+    # Sous le même plafond de 5000 bougies par requête, le M15 couvre ~52 jours
+    # contre ~3.5 en M1, sans rétrécir le budget de coût (écart mesuré ±3 % à
+    # détention égale sur période commune).
+    logger.info(f"Fetching Crash 1000 ({symbol_name_crash}) M15 candles...")
+    try:
+        crash_m15_df = client.fetch_candles_sync(
+            symbol=symbol_name_crash, count=5000, granularity=900
+        )
+        if not crash_m15_df.empty:
+            out_path = os.path.join(OUTPUT_DIR, "crash1000_m15.parquet")
+            crash_m15_df.to_parquet(out_path, index=False)
+            span = crash_m15_df["timestamp"].max() - crash_m15_df["timestamp"].min()
+            logger.info(
+                f"SECURITY CHECK: Symbol requested '{symbol_name_crash}' (M15) verified -> "
+                f"Saved {len(crash_m15_df)} rows spanning {span} to {out_path}"
+            )
+    except Exception as e:
+        logger.error(f"Failed to fetch Crash 1000 M15 data: {e}")
 
     # 2. Boom 1000 Index (BOOM1000)
     symbol_name = "BOOM1000"

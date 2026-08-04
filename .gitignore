@@ -15,3 +15,5 @@ reference/
 # Note de reprise entre sessions : etat de travail, pas artefact de projet.
 # Les decisions durables vont dans docs/ADR/ et docs/BACKLOG.md.
 docs/HANDOFF.md
+.validation_registry/
+

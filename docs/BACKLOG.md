@@ -125,7 +125,7 @@ L'ordre d'implémentation est strictement linéaire (Pipeline Quantitatif).
 ### SIG-02 : Redéfinition de l'horizon cible
 - **Objectif** : Mesurer la faisabilité économique AVANT d'entraîner, puis re-tester l'hypothèse « signal exploitable » à un horizon où l'espace économique existe.
 - **Priorité** : Critique — bloque la Phase 4
-- **Statut** : EN COURS — question de la porte de sortie **tranchée** (ADR 0023), entraînement à lancer
+- **Statut** : REJETÉ — Rejeté par la mesure (ADR 0024). L'étape « Recherche de features » avait été sautée ; 0/25 features présentent un signal mesurable hors échantillon.
 - **Prérequis** : DATA-01 **résolu** (75000 barres M1, 52 jours). COST-01 **résolu** (ADR 0021).
 - **Cible** : **5 barres M1 sur Crash 1000**, **10 barres M1 sur Boom 1000** (ADR 0021, revalidé ADR 0022 sur 75000 barres). Deux horizons, pas un : à marge 3x, Boom rend **23.4 %** de fenêtres à 5 barres contre **94.0 %** pour Crash — l'écart de coût (1.063 vs 0.745 bps) suffit à faire basculer Boom du mauvais côté de sa propre discontinuité de distribution. Un horizon unique serait un choix par commodité, pas par mesure. 5 minutes de détention sur Crash — cohérent avec l'objectif de décisions fréquentes, contre les 4 heures de la fenêtre 60-240 retirée à l'ADR 0020.
 - **Horizons écartés et pourquoi** : 1 barre reste **réfuté** (5.8 % de fenêtres sur 75000 barres — troisième confirmation indépendante après l'ADR 0019 et l'ADR 0021). 2 et 3 barres sont **fragiles à la marge** : le ratio s'effondre de 99.0 % à 9.6 % entre marge 1.0x et 2.0x à 2 barres. Un horizon dont la viabilité dépend d'un paramètre non dérivé n'est pas viable — le retenir serait du gate-adjusting (ADR 0018).
@@ -135,11 +135,20 @@ L'ordre d'implémentation est strictement linéaire (Pipeline Quantitatif).
   - **Contre-épreuve obligatoire** : le recouvrement des fenêtres (`forward_return_5[i]` et `[i+1]` partagent 4 barres sur 5) pouvait produire cette médiane par pur artefact. Marche aléatoire sans mémoire, σ calé **par bisection sur la même exposition** que la série réelle (premier essai confondu : 74.08 % contre 93.97 %) : méd/H tombe à **0.60** (Crash) et **0.30** (Boom), avec 58 % et 74 % de détentions courtes. Artefact réfuté — la persistance appartient aux séries.
   - **Coût assumé, à relever dans le P&L** : **12.4 %** (Crash) et **26.6 %** (Boom) des détentions se ferment **avant** l'horizon sur lequel le seuil d'entrée a été dimensionné. Régime minoritaire, pas nul. Non re-débattu : il apparaîtra en net au backtest.
   - **Outil** : `scripts/diagnose_signal_persistence.py` (graine du contrôle versionnée) + `oracle_target_exposure` / `oracle_holding_periods` dans `domain/tradability.py`. `oracle_target_exposure` reproduit la règle de décision **exacte** de `MLStrategy.generate_signals` — les deux évoluent ensemble. Tout nouvel instrument ou horizon repasse par ce script avant entraînement : la propriété est mesurée, jamais garantie.
+- **REJETÉ (ADR 0024)** : Entraînements LightGBM Crash 1000 h5 et Boom 1000 h10 à score 0/100. La décomposition P&L brut/coût montre un brut négatif sur Crash (−2315.29 $) et non distinguable de zéro sur Boom (+1461.24 $, t = +0.54). L'Alpha Research (Spearman IC) montre que 0/25 features survivent aux 4 cas. L'étape « Recherche de features » du pipeline avait été sautée. Campagne close.
+
+
+### FE-01 : Recherche de features obligatoire (Phase 4) — BLOQUANT
+- **Objectif** : Mesurer l'Information Coefficient (IC Spearman) et la significativité ($|t| > 2.0$) de chaque feature candidat sur Train et Test avant tout entraînement de modèle.
+- **Priorité** : Bloquante — condition préalable absolue à toute future campagne de signal
+- **Statut** : À FAIRE (Outil `scripts/run_feature_research.py` disponible et testé)
+- **Raison** : L'omission de cette étape sur SIG-01 et SIG-02 a conduit à entraîner des modèles sur des features au pouvoir prédictif mesuré nul (ADR 0024).
 
 ### KRO-01 : Kronos-mini (Phase 4) — SUSPENDU
 - **Objectif** : Substituer un modèle de séquence à LightGBM.
-- **Statut** : SUSPENDU jusqu'à SIG-02
-- **Raison** : sur `forward_return_1`, un meilleur modèle prédirait plus précisément une grandeur trop petite pour être tradée. Gain de précision réel, gain économique nul (ADR 0019).
+- **Statut** : SUSPENDU — Un meilleur modèle sur des features sans pouvoir prédictif mesuré est déjà réfuté par l'ADR 0019 et l'ADR 0024.
+- **Raison** : sur `forward_return_1`, un meilleur modèle prédirait plus précisément une grandeur trop petite pour être tradée. Gain de précision réel, gain économique nul (ADR 0019). Sur SIG-02, 0/25 features ont du signal (ADR 0024).
+
 
 ## Phase 3 : Production & Temps Réel
 
@@ -176,4 +185,10 @@ L'ordre d'implémentation est strictement linéaire (Pipeline Quantitatif).
 - **Antériorité** : `grep -rl fetch_candles tests/` ne renvoie que le fichier de pagination. La méthode n'a jamais été testée — ce n'est pas une régression de DATA-01.
 - **Pourquoi ça compte** : `fetch_candles` reste la route d'un diagnostic rapide à 5000 bougies (ADR 0022, décision 5), et `_candles_to_records` est désormais partagé avec le chemin paginé. Une régression sur le parsing casserait les deux.
 - **Coût estimé** : faible — la connexion doublée et les fixtures existent déjà dans `tests/providers/deriv/test_historical_pagination.py`.
+
+### DEBT-03 : `HoldOutValidator` et `WalkForwardValidator` à faire correspondre à leur nom ou à renommer
+- **Constat** : `scripts/train_qlib_model.py:210` passe le même dataset de test `ListDataFeed(test_sets)` à tous les validateurs. `HoldOutValidator` n'isole aucun sous-segment complémentaire (`ratio: 0.2` est une métadonnée décorative) et `WalkForwardValidator` découpe le segment en 5 folds sans jamais réentraîner la stratégie (contrôle de stabilité inter-période).
+- **Impact** : Les chiffres sont valides et hors échantillon, mais les noms des validateurs mentent sur ce qu'ils font.
+- **Action** : Réaligner l'implémentation des validateurs avec leur dénomination ou renommer les classes pour éviter toute ambiguïté sur les métriques de validation.
+
 

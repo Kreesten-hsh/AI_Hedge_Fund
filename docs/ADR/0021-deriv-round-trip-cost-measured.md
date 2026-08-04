@@ -34,6 +34,30 @@ Deriv ne publie pas de taux de commission par instrument et renvoie
 explicitement au ticket de trade. La mesure manuelle n'était donc pas un
 raccourci : c'était la seule route.
 
+> **PÉRIMÉ — corrigé le 2026-08-04 par COST-02.** Ce constat reposait sur des
+> sondes **non authentifiées** contre l'ancienne API v3. Sur la nouvelle API
+> (`api.derivws.com`, PAT + `Deriv-App-ID` + OTP), authentifié sur le compte
+> démo `DOT93925868`, **les quatre routes répondent** :
+>
+> | Requête | Résultat |
+> |---|---|
+> | `active_symbols` | OK — 78 symboles |
+> | `contracts_for: CRASH1000` | OK |
+> | `contracts_for: BOOM1000` | OK |
+> | `ticks_history` (`granularity: 60`) | OK — 500 bougies M1 |
+>
+> Le schéma a changé en même temps que l'authentification : `product_type`
+> (sur `active_symbols`) et `currency` (sur `contracts_for`) sont désormais
+> **refusés** — `InputValidationFailed: Properties not allowed`. Une sonde qui
+> conserve les champs v3 reçoit une erreur et se lit à tort comme « route
+> fermée ». C'est ce qui s'est produit ici.
+>
+> Ce que ça change : le catalogue d'offres et les spécifications d'instrument
+> sont récupérables par API, et `ticks_history` est une source M1 alternative à
+> MT5. Ce que ça ne change PAS : les chiffres de coût ci-dessous, mesurés sur
+> des tickets réels, restent la référence — `contracts_for` publie des
+> paramètres de contrat, pas le coût constaté d'un aller-retour.
+
 ### 2. Deux produits, deux structures de coût non interchangeables
 
 Distinction absente du backlog initial, qui présumait « spread intégré et
@@ -130,6 +154,35 @@ avec marge 3x).
 
 **1. Coût A/R retenu : 0.745 bps sur Crash 1000, 1.063 bps sur Boom 1000.**
 COST-01 est résolu. Le trou documenté de l'ADR 0020 est comblé par une mesure.
+
+> **CONFIRMÉ ET AFFINÉ le 2026-08-04 par COST-02** — mesure automatisée,
+> `scripts/measure_deriv_live_round_trip.py`, 5 A/R par instrument, compte démo
+> `DOT93925868`, mise 10 USD, multiplicateur x100, détention 5 s. Le relevé
+> manuel ne notait pas le spot au moment de la DÉCISION : ses chiffres sont donc
+> un **péage sur spots exécutés**, slippage exclu. Le script relève les deux et
+> les sépare (défavorable = positif) :
+>
+> | Instrument | Exécution (médiane) | Slippage (médiane) | Tout compris | ADR 0021 manuel |
+> |---|---|---|---|---|
+> | Crash 1000 | 0.652 bps | +0.002 bps | **0.652 bps** | 0.745 bps |
+> | Boom 1000 | 0.961 bps | −0.011 bps | **0.951 bps** | 1.063 bps |
+>
+> **Le slippage est négligeable** : |médiane| ≤ 0.011 bps, soit ~1 % du péage.
+> Le second terme que COST-02 devait rendre visible existe mais ne pèse rien à
+> cette échelle de détention. La décomposition `total = exécution + slippage`
+> reste la bonne forme ; c'est sa valeur qui est petite, pas sa pertinence.
+>
+> Les deux mesures automatisées sont **sous** les chiffres manuels (−12 % et
+> −11 %), et la dispersion est bien plus serrée (0.628–0.656 contre 0.657–3.306
+> sur Crash). Cohérent avec la cause déjà soupçonnée : la latence de saisie
+> manuelle gonflait le relevé. **Les 0.745 / 1.063 bps restent les chiffres
+> retenus** — ce sont les plus conservateurs, et retenir le plus bas des deux
+> reviendrait à choisir la mesure qui arrange, exactement le défaut corrigé par
+> l'ADR 0018. Aucun verdict d'horizon ne bascule : un coût plus bas ne peut
+> qu'élargir les fenêtres tradables.
+>
+> Réserve inchangée : compte **démo**. Le slippage y est synthétique et n'est
+> **pas** une preuve du slippage réel — à remesurer avant tout passage en réel.
 
 **2. Cible d'horizon SIG-02 : 5 barres M1 sur Crash 1000**, premier horizon
 robuste au choix de marge. Cible cohérente avec l'objectif de décisions

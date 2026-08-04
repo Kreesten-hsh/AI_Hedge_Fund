@@ -282,9 +282,21 @@ def assert_demo_ws_url(url: str, account_id: str) -> None:
 
 
 def _optional_float(value: object) -> Optional[float]:
-    """Le solde n'est que journalisé : son absence ne doit pas arrêter la mesure."""
+    """Le solde n'est que journalisé : son absence ne doit pas arrêter la mesure.
+
+    Deriv renvoie le solde en CHAÎNE (`'9999.25'`, relevé sur l'API réelle) et
+    non en nombre. N'accepter que les numériques journaliserait `None` sur une
+    réponse pourtant complète.
+    """
+    if isinstance(value, bool):
+        return None
     if isinstance(value, (int, float)):
         return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return None
     return None
 
 

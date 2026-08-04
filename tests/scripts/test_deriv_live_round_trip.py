@@ -404,6 +404,27 @@ class TestDemoAccountGuard:
         assert session.balance == 10_000.0
         assert session.ws_url == DEMO_WS_URL
 
+    def test_a_string_balance_is_still_read(self) -> None:
+        """Deriv renvoie le solde en chaîne (`'9999.25'`, relevé sur l'API
+        réelle). Ne l'accepter qu'en nombre journaliserait `None` sur une
+        réponse pourtant complète."""
+        session = _open_session(_FakeRestApi(accounts=[{**DEMO_ACCOUNT, "balance": "9999.25"}]))
+
+        assert session.balance == pytest.approx(9999.25)
+
+    def test_an_unparseable_balance_does_not_stop_the_measurement(self) -> None:
+        session = _open_session(_FakeRestApi(accounts=[{**DEMO_ACCOUNT, "balance": "n/a"}]))
+
+        assert session.balance is None
+
+    def test_a_boolean_balance_is_rejected_instead_of_becoming_one(self) -> None:
+        """`bool` est un sous-type de `int` en Python : sans garde explicite,
+        `True` deviendrait un solde de 1.0 — un chiffre faux vaut moins que rien.
+        """
+        session = _open_session(_FakeRestApi(accounts=[{**DEMO_ACCOUNT, "balance": True}]))
+
+        assert session.balance is None
+
     def test_a_missing_balance_does_not_stop_the_measurement(self) -> None:
         """Le solde n'est que journalisé : il n'entre dans aucun calcul de coût."""
         account = {k: v for k, v in DEMO_ACCOUNT.items() if k != "balance"}

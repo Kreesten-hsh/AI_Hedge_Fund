@@ -127,6 +127,16 @@ def main() -> int:
     parser.add_argument("--parquet", default="crash1000.parquet")
     parser.add_argument("--train-ratio", type=float, default=0.7)
     parser.add_argument("--n-estimators", type=int, default=300)
+    parser.add_argument(
+        "--horizon",
+        type=int,
+        default=1,
+        help=(
+            "Distance en barres du label forward. 1 est REFUTÉ économiquement sur "
+            "CRASH1000 (ADR 0019/0020 : budget de coût 0.60-0.69 bps). Lire la "
+            "table de `diagnose_cost_budget_by_horizon.py` avant de choisir."
+        ),
+    )
     parser.add_argument("--commission-rate", type=float, default=0.001)
     parser.add_argument("--slippage-bps", type=float, default=5.0)
     parser.add_argument(
@@ -153,7 +163,7 @@ def main() -> int:
     logger.info("Split chronologique : %d train / %d test.", len(train_sets), len(test_sets))
 
     # 2. Entraînement sur le segment d'entraînement uniquement
-    builder = DatasetBuilder(price_key=PRICE_KEY)
+    builder = DatasetBuilder(price_key=PRICE_KEY, horizon=args.horizon)
     train_dataset = builder.build_supervised(train_sets)
     model = ModelFactory.create_model(
         "lightgbm", n_estimators=args.n_estimators, verbose=-1

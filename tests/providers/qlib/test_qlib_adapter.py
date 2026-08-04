@@ -123,6 +123,65 @@ class TestSupervisedLabel:
             DatasetBuilder().build_supervised(naked)
 
 
+class TestConfigurableHorizon:
+    """Horizon du label paramétrable (ADR 0020).
+
+    Le budget de coût mesuré est nul à 1 barre et n'ouvre d'espace économique
+    qu'à partir de ~15 barres M1 : l'horizon devient une variable de recherche,
+    plus une constante câblée.
+    """
+
+    def test_label_spans_the_requested_horizon(self) -> None:
+        # +1% par barre : le rendement sur 3 barres vaut 1.01**3 - 1.
+        closes = _trend(100.0, 0.01, 5)
+        dataset = DatasetBuilder(horizon=3).build_supervised(_feature_sets(closes))
+
+        # 5 barres, horizon 3 -> 2 lignes : les 3 dernières n'ont pas de
+        # successeur à distance 3.
+        assert len(dataset) == 2
+        assert dataset.target_col == "forward_return_3"
+        assert dataset.raw_data[0]["forward_return_3"] == pytest.approx(1.01**3 - 1.0)
+
+    def test_horizon_one_is_the_historical_default(self) -> None:
+        """Le défaut reste 1 barre : aucune régression sur les runs déjà validés."""
+        builder = DatasetBuilder()
+
+        assert builder.horizon == 1
+        assert builder.target_feature == TARGET_COLUMN
+
+    def test_target_name_encodes_the_horizon(self) -> None:
+        """Deux horizons ne doivent jamais partager un nom de colonne : un
+        dataset 15 barres étiqueté `forward_return_1` serait indistinguable
+        d'un dataset 1 barre dans les artefacts et les sidecars de modèle."""
+        assert DatasetBuilder(horizon=15).target_feature == "forward_return_15"
+
+    def test_longer_horizon_target_never_enters_the_feature_matrix(self) -> None:
+        """La cible est exclue par son nom exact : un horizon renommé ne doit pas
+        rouvrir la fuite que `_NON_FEATURE_COLUMNS` fermait pour `forward_return_1`."""
+        dataset = DatasetBuilder(horizon=15).build_supervised(
+            _feature_sets(_trend(100.0, 0.002, 80))
+        )
+
+        matrix = _feature_matrix(dataset)
+
+        assert "forward_return_15" not in matrix.columns
+        assert "rsi_14" in matrix.columns
+
+    def test_horizon_below_one_is_refused(self) -> None:
+        """Horizon 0 étiquetterait la barre courante (fuite), négatif regarderait
+        le passé : deux cibles silencieusement fausses plutôt que bruyantes."""
+        for invalid in (0, -1):
+            with pytest.raises(ValueError, match="horizon"):
+                DatasetBuilder(horizon=invalid)
+
+    def test_horizon_longer_than_history_yields_no_labels(self) -> None:
+        """Aucune barre n'a de successeur à distance 10 : dataset vide, pas
+        d'étiquette inventée."""
+        dataset = DatasetBuilder(horizon=10).build_supervised(_feature_sets(_trend(100.0, 0.002, 5)))
+
+        assert len(dataset) == 0
+
+
 class TestTargetLeakage:
     def test_target_column_never_enters_the_feature_matrix(self) -> None:
         """Fuite parfaite si la cible sert de feature : le modèle apprend l'identité."""

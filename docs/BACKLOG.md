@@ -64,12 +64,25 @@ L'ordre d'implémentation est strictement linéaire (Pipeline Quantitatif).
 - **Réserve encore OUVERTE** : la mesure de départage compare des mouvements de bout en bout et est **aveugle au chemin intra-fenêtre par construction**. Elle ne dit rien sur la capacité de features calculées en M15 à voir les spikes de Crash 1000. Cette question se tranche côté features, dans SIG-02.
 
 ### COST-01 : Mesurer le coût de transaction Deriv réel
-- **Objectif** : Obtenir le coût aller-retour réel sur Crash 1000 et Boom 1000 — spread intégré **et** commission de multiplier, pas l'un sans l'autre.
+- **Objectif** : Obtenir le coût aller-retour réel sur Crash 1000 et Boom 1000.
 - **Priorité** : Critique — prérequis de SIG-02
-- **Statut** : BLOQUÉ hors API publique
-- **Constat** (ADR 0020) : le catalogue d'offres Deriv revient vide depuis l'environnement de développement (`clients_country: bj`). `active_symbols` renvoie 0 symbole sur 3 `app_id` et 2 hôtes, ce qui ferme en cascade `contracts_for`, `proposal` et l'abonnement `ticks`. Seul `ticks_history` répond, et il ne renvoie qu'un prix unique — jamais bid/ask.
-- **Route restante** : lecture sur compte réel (panneau de trade Deriv ou MT5). Aucune estimation ne sera câblée en attendant — un chiffre supposé est exactement le défaut corrigé par l'ADR 0018.
-- **Usage** : le chiffre obtenu se lit directement dans la table de budget de l'ADR 0020 (`scripts/diagnose_cost_budget_by_horizon.py`) pour fixer l'horizon cible. Aucune re-mesure nécessaire.
+- **Statut** : BLOQUÉ — toutes les routes automatisables sont fermées, mesure manuelle requise
+- **Prérequis oublié, à trancher d'abord** : **quel produit ?** Les deux ont des structures de coût non interchangeables.
+  | Produit | Structure |
+  |---|---|
+  | Deriv Trader — multipliers | commission = notionnel × taux, notionnel = mise × multiplicateur |
+  | Deriv MT5 — CFD | spread en points + commission par lot |
+  Mesurer le mauvais produit donne un chiffre exact et inutilisable.
+- **Routes fermées, vérifiées** :
+  - API WebSocket Deriv : `active_symbols` renvoie 0 symbole (`clients_country: bj`), ce qui ferme en cascade `contracts_for`, `proposal` et `ticks`. Seul `ticks_history` répond, et il ne renvoie qu'un prix unique — jamais bid/ask (ADR 0020).
+  - REST public : `api.deriv.com/api-explorer/data/active_symbols.json` renvoie **HTTP 403**.
+  - Specs publiées : `deriv.com/trading-specifications` est rendue côté client, **0 occurrence de « crash »** dans le HTML servi, aucun endpoint de données exposé. Deriv ne publie pas le taux de commission par instrument et renvoie explicitement au ticket de trade.
+  - **MT5 (`scripts/ingest_mt5.py`)** : deux blocages indépendants. (1) `MT5_SERVER = MetaQuotes-Demo` est le serveur démo générique de MetaQuotes, **pas** un serveur Deriv — il ne porte ni CRASH1000 ni BOOM1000. (2) Le paquet pip `MetaTrader5` est Windows-only et l'hôte de développement est Linux. Cette route redevient viable sur un compte Deriv-MT5 depuis Windows.
+- **Relevé manuel — multipliers** : ticket Deriv Trader, Crash 1000, onglet Multipliers. Noter **mise**, **multiplicateur**, **commission** affichés, puis :
+  `coût A/R en bps = 2 × (commission / (mise × multiplicateur)) × 10000`
+  Le multiplicateur s'annule : P&L = mise × M × variation%, commission = mise × M × taux, donc le coût exprimé en rendement vaut `2 × taux` quel que soit M. Le chiffre est directement comparable à la table de budget de l'ADR 0020.
+- **Relevé manuel — MT5 CFD** : spread en points et commission par lot, à convertir en bps du notionnel.
+- **Usage** : le chiffre obtenu se lit directement dans la table de budget de l'ADR 0020 (`scripts/diagnose_cost_budget_by_horizon.py`) pour fixer l'horizon cible. Aucune re-mesure nécessaire. Aucune estimation ne sera câblée en attendant — un chiffre supposé est exactement le défaut corrigé par l'ADR 0018.
 
 ### SIG-02 : Redéfinition de l'horizon cible
 - **Objectif** : Mesurer la faisabilité économique AVANT d'entraîner, puis re-tester l'hypothèse « signal exploitable » à un horizon où l'espace économique existe.
@@ -77,7 +90,9 @@ L'ordre d'implémentation est strictement linéaire (Pipeline Quantitatif).
 - **Statut** : PLANNED
 - **Prérequis** : DATA-01 **et** COST-01. Ne pas lancer SIG-02 sur les 5000 barres actuelles.
 - **Cible** : la fenêtre « 60-240 barres M1 » de l'ADR 0019 est **retirée** — elle découlait des 30 bps supposés du `SimulatedBroker`, pas d'une mesure. Viser l'horizon le plus COURT dont le budget dépasse le coût réel, ce qui préserve l'objectif de décisions fréquentes. Ordre de grandeur mesuré : ~9.5 bps de budget à 15 min de détention, ~29.5 bps à 1 h (20 % de fenêtres).
-- **Outil** : `aegis_trade.domain.tradability` (`tradable_window_ratio`, `is_horizon_tradable`, `max_viable_round_trip_cost`) + `scripts/diagnose_cost_budget_by_horizon.py` et `scripts/diagnose_horizon_vs_cost.py`. Le gate passe AVANT tout entraînement : le budget est un plafond atteignable par un oracle, donc un budget sous le coût réfute l'horizon sans dépenser de temps de calcul.
+- **Outil** : `aegis_trade.domain.tradability` (`tradable_window_ratio`, `is_horizon_tradable`, `max_viable_round_trip_cost`) + `scripts/diagnose_cost_budget_by_horizon.py` et `scripts/diagnose_horizon_vs_cost.py`. Le gate passe AVANT tout entraînement : le budget est un plafond atteignable par un oracle, donc un budget sous le coût réel réfute l'horizon sans dépenser de temps de calcul.
+- **Déblocage technique fait** : l'horizon du label n'est plus câblé. `DatasetBuilder(horizon=N)` étiquette à `forward_return_N` (nom dérivé de l'horizon pour que deux campagnes d'horizons différents ne se confondent pas dans le registre), et `scripts/train_qlib_model.py --horizon N` l'expose. Horizon < 1 refusé (0 = fuite, négatif = passé). La fuite de cible reste couverte : `model_factory._feature_matrix` exclut `dataset.target_col` par son nom exact, pas seulement la constante.
+- **Reste à trancher côté stratégie** : **« horizon du label » ≠ « durée de détention »**. `MLStrategy` déclare une exposition cible à chaque barre ; avec `horizon=15`, le modèle prédit un rendement à 15 barres mais la détention effective est dictée par la persistance du signal. Le seuil d'entrée reste cohérent (rendement attendu vs coût A/R), mais la sortie n'est pas alignée sur l'horizon. À décider dans SIG-02, pas par défaut.
 
 ### KRO-01 : Kronos-mini (Phase 4) — SUSPENDU
 - **Objectif** : Substituer un modèle de séquence à LightGBM.

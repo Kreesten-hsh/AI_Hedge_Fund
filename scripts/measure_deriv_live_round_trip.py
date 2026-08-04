@@ -24,14 +24,31 @@ FRONTIÈRE ARCHITECTURALE — pourquoi ce fichier est dans `scripts/` et pas dan
 CLAUDE.md interdit qu'un chemin de code du système puisse faire ça. Le garder
 hors du paquet garantit qu'aucun import depuis `src/` ne peut l'atteindre : c'est
 un instrument de mesure, jamais un composant d'exécution. Les garde-fous ci-
-dessous (compte virtuel obligatoire, mise plafonnée, nombre d'allers-retours
+dessous (compte démo obligatoire, mise plafonnée, nombre d'allers-retours
 plafonné) remplacent le risk check absent, et sont volontairement rigides.
+
+AUTHENTIFICATION — nouvelle API Deriv, pas l'API WebSocket v3 historique. Le
+message `authorize` in-band N'EXISTE PLUS (aucun `authorize_request.schema.json`
+dans le spec officiel) et un Personal Access Token est rejeté par l'ancien point
+d'entrée avec `InvalidToken`. Le jeton ne transite donc plus jamais par le
+WebSocket. La séquence est :
+
+    GET  /trading/v1/options/accounts                 (Bearer PAT + Deriv-App-ID)
+    POST /trading/v1/options/accounts/{id}/otp        -> data.url
+    connexion au WebSocket sur cette URL, l'OTP y est déjà en query
+
+Conséquence pour le garde-fou : `is_virtual` n'existe plus non plus. Le nouveau
+modèle porte `account_type: "demo" | "real"`, et Deriv confirme le canal
+réellement ouvert dans le chemin de l'URL (`/ws/demo` vs `/ws/real`). Les deux
+sont vérifiés — le premier est déclaratif, le second fait foi.
 
 Usage :
     .venv/bin/python scripts/measure_deriv_live_round_trip.py \\
         --symbol CRASH1000 --trades 5 --stake 10 --multiplier 100 --hold 5
 
-Le token est lu dans `.env` (`DERIV_API_TOKEN`) et n'est jamais journalisé.
+`DERIV_API_TOKEN` (PAT, portée `trade`) et `DERIV_APP_ID` sont lus dans `.env`.
+Ni le token ni l'OTP ne sont journalisés : l'URL renvoyée par l'OTP porte un
+identifiant de connexion dans sa query et est systématiquement caviardée.
 """
 
 from __future__ import annotations
@@ -46,13 +63,24 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional, Protocol
+from urllib.parse import urlsplit
 
+import httpx
 import websockets
 from dotenv import load_dotenv
 
 logger = logging.getLogger("deriv_live_round_trip")
 
-DERIV_WS_URL = "wss://ws.derivws.com/websockets/v3?app_id=1089"
+# Nouvelle API Deriv. L'ancien `wss://ws.derivws.com/websockets/v3?app_id=...`
+# n'accepte pas les Personal Access Tokens et n'est donc plus une route.
+DERIV_REST_BASE = "https://api.derivws.com"
+ACCOUNTS_PATH = "/trading/v1/options/accounts"
+REST_TIMEOUT_SECONDS = 30.0
+
+# Deriv encode le type de canal dans le chemin de l'URL renvoyée par l'OTP.
+# C'est la seule affirmation de démo qui vienne du serveur et non de nous.
+DEMO_WS_PATH_SUFFIX = "/ws/demo"
+
 BPS_PER_UNIT = 10_000.0
 
 # Garde-fous. Ce script contourne le RiskEngine par construction ; ces trois
@@ -77,13 +105,205 @@ class DerivApiError(RuntimeError):
     """
 
 
+class DerivRestError(DerivApiError):
+    """Échec du préambule REST (liste de comptes, OTP).
+
+    Sous-classe de `DerivApiError` : pour l'appelant, une authentification qui
+    échoue et un ordre qui échoue sont le même type d'incident — l'API refuse.
+    """
+
+
 class LiveAccountRefused(RuntimeError):
-    """Le token authentifie un compte RÉEL.
+    """Le compte visé n'est pas un compte démo.
 
     Le script s'arrête avant tout ordre. Mesurer un coût de transaction ne vaut
-    pas le risque d'ouvrir une position financée par erreur, et un token démo
-    coûte trente secondes à régénérer.
+    pas le risque d'ouvrir une position financée par erreur.
     """
+
+
+@dataclass(frozen=True)
+class DemoSession:
+    """Ce que le préambule REST produit : de quoi ouvrir le WebSocket, et rien de plus."""
+
+    account_id: str
+    currency: str
+    balance: Optional[float]
+    ws_url: str
+
+
+def redact_otp(url: str) -> str:
+    """Retire l'OTP d'une URL avant journalisation.
+
+    L'URL renvoyée par Deriv porte un identifiant de connexion dans sa query.
+    La journaliser telle quelle publierait un secret d'authentification dans
+    des logs de mesure — qui, eux, n'ont aucune raison d'être protégés.
+    """
+    base, separator, _query = url.partition("?")
+    return f"{base}?otp=***" if separator else base
+
+
+def _rest_error_text(response: httpx.Response) -> str:
+    """Résume l'erreur d'une réponse REST sans jamais renvoyer les en-têtes.
+
+    Deriv répond parfois en texte brut (`Invalid application`) et parfois avec
+    un bloc `errors` structuré : les deux doivent rester lisibles.
+    """
+    try:
+        body: Any = response.json()
+    except ValueError:
+        return response.text.strip()[:200] or "corps vide"
+
+    if isinstance(body, dict):
+        errors = body.get("errors")
+        if isinstance(errors, list) and errors and isinstance(errors[0], dict):
+            first: dict[str, Any] = errors[0]
+            return f"{first.get('code', '?')} : {first.get('message', '?')}"
+    return json.dumps(body)[:200]
+
+
+class DerivRestClient:
+    """Préambule d'authentification de la nouvelle API Deriv.
+
+    Le PAT ne sert QUE ici. Il ne descend jamais jusqu'au WebSocket : ce qui y
+    descend est un OTP à usage unique, dérivé du compte explicitement choisi.
+    """
+
+    def __init__(self, http: httpx.AsyncClient, app_id: str, token: str) -> None:
+        self._http = http
+        self._headers = {
+            "Deriv-App-ID": app_id,
+            "Authorization": f"Bearer {token}",
+        }
+
+    async def _call(self, method: str, path: str) -> dict[str, Any]:
+        response = await self._http.request(
+            method, f"{DERIV_REST_BASE}{path}", headers=self._headers
+        )
+        if response.status_code >= 400:
+            raise DerivRestError(
+                f"{method} {path} : HTTP {response.status_code} — {_rest_error_text(response)}"
+            )
+        try:
+            body: Any = response.json()
+        except ValueError as exc:
+            raise DerivRestError(f"{method} {path} : réponse non JSON.") from exc
+        if not isinstance(body, dict):
+            raise DerivRestError(f"{method} {path} : réponse de forme inattendue.")
+        return body
+
+    async def list_accounts(self) -> list[dict[str, Any]]:
+        body = await self._call("GET", ACCOUNTS_PATH)
+        data = body.get("data")
+        if not isinstance(data, list):
+            raise DerivRestError("Réponse `/accounts` sans liste `data` exploitable.")
+        return [account for account in data if isinstance(account, dict)]
+
+    async def request_otp(self, account_id: str) -> str:
+        """Rend l'URL WebSocket prête à l'emploi, OTP déjà en query."""
+        body = await self._call("POST", f"{ACCOUNTS_PATH}/{account_id}/otp")
+        data = body.get("data")
+        url = data.get("url") if isinstance(data, dict) else None
+        if not isinstance(url, str) or not url:
+            raise DerivRestError(f"Aucune URL WebSocket renvoyée pour le compte {account_id}.")
+        return url
+
+
+def _refuse_unless_demo(account: dict[str, Any]) -> None:
+    """Refuse tout compte dont `account_type` n'est pas exactement `demo`.
+
+    Champ absent = refus, comme un type `real`. Un défaut permissif
+    transformerait une réponse tronquée en autorisation de trader en réel.
+    """
+    account_type = account.get("account_type")
+    if account_type != "demo":
+        raise LiveAccountRefused(
+            f"Compte {account.get('account_id', '?')} de type {account_type!r} : "
+            "ce script passe des ordres sans risk check et refuse tout compte "
+            "qui n'est pas explicitement `demo`."
+        )
+
+
+def select_demo_account(
+    accounts: list[dict[str, Any]], requested_account_id: Optional[str] = None
+) -> dict[str, Any]:
+    """Choisit le compte à trader, et refuse tout ce qui n'est pas démo.
+
+    Le choix est explicite plutôt qu'implicite : sans `--account-id`, un compte
+    démo actif et un seul est retenu. Plusieurs candidats sans consigne serait
+    un choix arbitraire sur un compte qui passe des ordres — on refuse.
+    """
+    if requested_account_id is not None:
+        matching = [a for a in accounts if a.get("account_id") == requested_account_id]
+        if not matching:
+            raise DerivRestError(
+                f"Compte {requested_account_id} absent de la liste renvoyée par Deriv."
+            )
+        _refuse_unless_demo(matching[0])
+        return matching[0]
+
+    demos = [a for a in accounts if a.get("account_type") == "demo"]
+    if not demos:
+        seen = sorted({str(a.get("account_type")) for a in accounts})
+        raise LiveAccountRefused(
+            "Aucun compte `demo` dans la liste renvoyée par Deriv "
+            f"(types vus : {seen or ['aucun compte']}). Aucun ordre n'est envoyé."
+        )
+
+    active = [a for a in demos if a.get("status") == "active"]
+    if not active:
+        raise DerivRestError(
+            "Comptes démo trouvés mais aucun actif "
+            f"(statuts : {sorted({str(a.get('status')) for a in demos})})."
+        )
+    if len(active) > 1:
+        raise DerivRestError(
+            f"{len(active)} comptes démo actifs : "
+            f"{[str(a.get('account_id')) for a in active]}. "
+            "Préciser lequel avec `--account-id` — ce script passe des ordres, "
+            "il ne devine pas sur lequel."
+        )
+    return active[0]
+
+
+def assert_demo_ws_url(url: str, account_id: str) -> None:
+    """Second garde-fou, celui-ci affirmé par le serveur.
+
+    `account_type` est déclaratif et vient d'une liste lue avant l'OTP. Le
+    chemin de l'URL renvoyée (`/ws/demo` contre `/ws/real`) est ce que Deriv
+    ouvre réellement. Vérifier les deux évite qu'un compte mal apparié ouvre un
+    canal réel malgré un garde-fou déclaratif satisfait.
+    """
+    parts = urlsplit(url)
+    if parts.scheme != "wss" or not parts.path.endswith(DEMO_WS_PATH_SUFFIX):
+        raise LiveAccountRefused(
+            f"URL WebSocket hors canal démo pour {account_id} : {redact_otp(url)}. "
+            "Connexion refusée."
+        )
+
+
+def _optional_float(value: object) -> Optional[float]:
+    """Le solde n'est que journalisé : son absence ne doit pas arrêter la mesure."""
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
+async def open_demo_session(
+    rest: DerivRestClient, requested_account_id: Optional[str] = None
+) -> DemoSession:
+    accounts = await rest.list_accounts()
+    account = select_demo_account(accounts, requested_account_id)
+    account_id = str(account["account_id"])
+
+    ws_url = await rest.request_otp(account_id)
+    assert_demo_ws_url(ws_url, account_id)
+
+    return DemoSession(
+        account_id=account_id,
+        currency=str(account.get("currency", "?")),
+        balance=_optional_float(account.get("balance")),
+        ws_url=ws_url,
+    )
 
 
 class _Connection(Protocol):
@@ -274,26 +494,6 @@ class DerivTradingClient:
                 )
             return message
 
-    async def authorize(self, token: str) -> dict[str, Any]:
-        """Authentifie et REFUSE tout compte non virtuel.
-
-        Le refus est ici, au plus près de la seule information qui le permet,
-        et non dans `main()` : aucun appel d'ordre ne peut précéder celui-ci.
-        """
-        response = await self._request({"authorize": token})
-        account = response.get("authorize")
-        if not isinstance(account, dict):
-            raise DerivApiError("Réponse `authorize` sans bloc de compte exploitable.")
-
-        if not account.get("is_virtual"):
-            raise LiveAccountRefused(
-                f"Compte {account.get('loginid', '?')} n'est pas virtuel "
-                "(`is_virtual` faux). Ce script passe des ordres sans risk check "
-                "et refuse de toucher un compte réel. Générer un token sur le "
-                "compte démo."
-            )
-        return account
-
     async def latest_spot(self, symbol: str) -> float:
         """Dernier prix connu, relevé juste avant l'ordre.
 
@@ -329,7 +529,10 @@ class DerivTradingClient:
                     "contract_type": contract_type,
                     "currency": "USD",
                     "multiplier": multiplier,
-                    "symbol": symbol,
+                    # La nouvelle API nomme ce champ `underlying_symbol`.
+                    # `symbol` est accepté à la sérialisation puis rejeté côté
+                    # serveur : rupture silencieuse, pas erreur de typage.
+                    "underlying_symbol": symbol,
                 },
             }
         )
@@ -473,6 +676,7 @@ def summarise(round_trips: list[RoundTrip]) -> None:
 
 async def run_session(
     token: str,
+    app_id: str,
     symbol: str,
     direction: int,
     stake_usd: float,
@@ -480,17 +684,34 @@ async def run_session(
     trades: int,
     hold_seconds: float,
     csv_path: Path,
+    account_id: Optional[str] = None,
+    transport: Optional[httpx.AsyncBaseTransport] = None,
 ) -> list[RoundTrip]:
+    """Préambule REST, puis toute la session de mesure sur une seule connexion.
+
+    `transport` est injectable pour que les tests couvrent le préambule sans
+    réseau. Il ne sert à rien d'autre : en production il vaut `None` et httpx
+    ouvre son transport par défaut.
+    """
     round_trips: list[RoundTrip] = []
-    async with websockets.connect(DERIV_WS_URL) as connection:
-        client = DerivTradingClient(connection)
-        account = await client.authorize(token)
-        logger.info(
-            "Compte démo %s authentifié (devise %s, solde %s).",
-            account.get("loginid"),
-            account.get("currency"),
-            account.get("balance"),
+
+    async with httpx.AsyncClient(
+        timeout=REST_TIMEOUT_SECONDS, transport=transport
+    ) as http:
+        session = await open_demo_session(
+            DerivRestClient(http, app_id, token), account_id
         )
+
+    logger.info(
+        "Compte démo %s (devise %s, solde %s) — WebSocket %s.",
+        session.account_id,
+        session.currency,
+        session.balance,
+        redact_otp(session.ws_url),
+    )
+
+    async with websockets.connect(session.ws_url) as connection:
+        client = DerivTradingClient(connection)
 
         for index in range(trades):
             try:
@@ -531,6 +752,11 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser.add_argument("--trades", type=int, default=5)
     parser.add_argument("--hold", type=float, default=5.0, help="Détention en secondes.")
     parser.add_argument("--csv", type=Path, default=DEFAULT_CSV_PATH)
+    parser.add_argument(
+        "--account-id",
+        default=None,
+        help="Compte à trader. Obligatoire si le PAT en expose plusieurs actifs.",
+    )
     return parser.parse_args(argv)
 
 
@@ -550,10 +776,21 @@ def main(argv: Optional[list[str]] = None) -> int:
         logger.error("`DERIV_API_TOKEN` absent de l'environnement et de `.env`.")
         return 2
 
+    app_id = os.environ.get("DERIV_APP_ID", "").strip()
+    if not app_id:
+        logger.error(
+            "`DERIV_APP_ID` absent de l'environnement et de `.env`. La nouvelle "
+            "API Deriv rejette tout Personal Access Token sans en-tête "
+            "`Deriv-App-ID` : enregistrer une application sur "
+            "https://home.deriv.com/dashboard puis renseigner son identifiant."
+        )
+        return 2
+
     try:
         round_trips = asyncio.run(
             run_session(
                 token=token,
+                app_id=app_id,
                 symbol=args.symbol,
                 direction=args.direction,
                 stake_usd=args.stake,
@@ -561,6 +798,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 trades=args.trades,
                 hold_seconds=args.hold,
                 csv_path=args.csv,
+                account_id=args.account_id,
             )
         )
     except LiveAccountRefused as exc:

@@ -5,8 +5,10 @@ pour laquelle il vit dans `scripts/`. Les tests ci-dessous couvrent donc en
 priorité ce qui remplace le risk check absent : refus d'un compte réel, plafonds
 de mise et de volume, fermeture garantie d'une position ouverte.
 
-Aucun réseau : la connexion est doublée et répond à partir du contenu de la
-requête, `req_id` compris. Le protocole n'est pas raccourci pour autant.
+Aucun réseau, sur les DEUX couches de la nouvelle API : le préambule REST passe
+par un `httpx.MockTransport`, et le WebSocket par une connexion doublée qui
+répond à partir du contenu de la requête, `req_id` compris. Le protocole n'est
+raccourci sur aucune des deux.
 """
 
 from __future__ import annotations
@@ -15,8 +17,9 @@ import asyncio
 import csv
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
+import httpx
 import pytest
 
 from scripts.measure_deriv_live_round_trip import (
@@ -24,19 +27,110 @@ from scripts.measure_deriv_live_round_trip import (
     MAX_STAKE_USD,
     MAX_TRADES_PER_RUN,
     DerivApiError,
+    DerivRestClient,
+    DerivRestError,
     DerivTradingClient,
     LiveAccountRefused,
     RoundTrip,
     append_round_trips,
+    assert_demo_ws_url,
     main,
+    open_demo_session,
+    redact_otp,
     run_round_trip,
     run_session,
+    select_demo_account,
     summarise,
     validate_run_parameters,
 )
 
 SYMBOL = "CRASH1000"
 CONTRACT_ID = 987654321
+
+APP_ID = "99999"
+TOKEN = "pat-secret-value"
+OTP = "one-time-secret"
+DEMO_WS_URL = f"wss://api.derivws.com/trading/v1/options/ws/demo?otp={OTP}"
+REAL_WS_URL = f"wss://api.derivws.com/trading/v1/options/ws/real?otp={OTP}"
+
+DEMO_ACCOUNT: dict[str, Any] = {
+    "account_id": "VRTC1234",
+    "account_type": "demo",
+    "currency": "USD",
+    "balance": 10_000.0,
+    "status": "active",
+}
+REAL_ACCOUNT: dict[str, Any] = {
+    "account_id": "CR1234",
+    "account_type": "real",
+    "currency": "USD",
+    "balance": 42.0,
+    "status": "active",
+}
+
+
+def _response(status: int, body: object) -> httpx.Response:
+    if isinstance(body, str):
+        return httpx.Response(status, text=body)
+    return httpx.Response(status, json=body)
+
+
+class _FakeRestApi:
+    """Préambule REST doublé : liste de comptes puis OTP.
+
+    Les deux points d'entrée sont paramétrables indépendamment parce que leurs
+    modes de défaillance ne sont pas les mêmes : le premier peut mentir sur le
+    type de compte, le second sur le canal réellement ouvert.
+    """
+
+    def __init__(
+        self,
+        *,
+        accounts: Optional[list[dict[str, Any]]] = None,
+        accounts_status: int = 200,
+        accounts_body: object = None,
+        otp_url: str = DEMO_WS_URL,
+        otp_status: int = 200,
+        otp_body: object = None,
+    ) -> None:
+        self._accounts_status = accounts_status
+        self._accounts_body: object = (
+            accounts_body
+            if accounts_body is not None
+            else {"data": accounts if accounts is not None else [DEMO_ACCOUNT]}
+        )
+        self._otp_status = otp_status
+        self._otp_body: object = (
+            otp_body if otp_body is not None else {"data": {"url": otp_url}}
+        )
+        self.requests: list[httpx.Request] = []
+
+    @property
+    def transport(self) -> httpx.MockTransport:
+        return httpx.MockTransport(self._handle)
+
+    def _handle(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(request)
+        if request.url.path.endswith("/otp"):
+            return _response(self._otp_status, self._otp_body)
+        return _response(self._accounts_status, self._accounts_body)
+
+
+def _call_rest(api: _FakeRestApi, method: str, *args: object) -> Any:
+    async def _run() -> Any:
+        async with httpx.AsyncClient(transport=api.transport) as http:
+            client = DerivRestClient(http, APP_ID, TOKEN)
+            return await getattr(client, method)(*args)
+
+    return asyncio.run(_run())
+
+
+def _open_session(api: _FakeRestApi, account_id: Optional[str] = None) -> Any:
+    async def _run() -> Any:
+        async with httpx.AsyncClient(transport=api.transport) as http:
+            return await open_demo_session(DerivRestClient(http, APP_ID, TOKEN), account_id)
+
+    return asyncio.run(_run())
 
 
 class _FakeDerivServer:
@@ -45,12 +139,14 @@ class _FakeDerivServer:
     Répondre au contenu et non à un ordre d'appel figé : c'est ce qui permet
     d'exercer l'appariement par `req_id` et les erreurs ciblées sans réécrire
     une file de messages à chaque test.
+
+    Aucune réponse `authorize` : ce message n'existe plus dans la nouvelle API,
+    le jeton ne transite jamais par le WebSocket.
     """
 
     def __init__(
         self,
         *,
-        is_virtual: int | None = 1,
         spots: list[float] | None = None,
         entry_spot: float = 5800.0,
         exit_spot: float = 5800.0,
@@ -59,7 +155,6 @@ class _FakeDerivServer:
         errors: dict[str, str] | None = None,
         noise_before_reply: int = 0,
     ) -> None:
-        self.is_virtual = is_virtual
         self.spots = list(spots or [5800.0, 5800.0])
         self.entry_spot = entry_spot
         self.exit_spot = exit_spot
@@ -96,16 +191,6 @@ class _FakeDerivServer:
             if key in payload:
                 return {"req_id": req_id, "error": {"code": "TestError", "message": message}}
 
-        if "authorize" in payload:
-            account: dict[str, Any] = {
-                "loginid": "VRTC1234" if self.is_virtual else "CR1234",
-                "currency": "USD",
-                "balance": 10_000.0,
-            }
-            # `None` = champ absent de la réponse, cas distinct de `is_virtual: 0`.
-            if self.is_virtual is not None:
-                account["is_virtual"] = self.is_virtual
-            return {"req_id": req_id, "authorize": account}
         if "ticks_history" in payload:
             spot = self.spots.pop(0) if self.spots else 5800.0
             return {"req_id": req_id, "history": {"prices": [spot], "times": [1_770_000_000]}}
@@ -148,33 +233,234 @@ def _round_trip(server: _FakeDerivServer, direction: int = 1) -> RoundTrip:
     )
 
 
+class TestRestPreamble:
+    """Le PAT ne sert qu'ici. Ce qui descend au WebSocket est un OTP dérivé."""
+
+    def test_every_call_carries_the_pat_and_the_app_id(self) -> None:
+        """Sans `Deriv-App-ID`, la nouvelle API rejette tout PAT — l'en-tête
+        n'est pas optionnel, c'est la moitié de l'authentification."""
+        api = _FakeRestApi()
+
+        _call_rest(api, "list_accounts")
+
+        request = api.requests[0]
+        assert request.headers["Deriv-App-ID"] == APP_ID
+        assert request.headers["Authorization"] == f"Bearer {TOKEN}"
+
+    def test_otp_is_requested_on_the_chosen_account(self) -> None:
+        api = _FakeRestApi()
+
+        url = _call_rest(api, "request_otp", "VRTC1234")
+
+        assert url == DEMO_WS_URL
+        assert api.requests[0].method == "POST"
+        assert api.requests[0].url.path.endswith("/accounts/VRTC1234/otp")
+
+    def test_structured_error_block_is_reported(self) -> None:
+        api = _FakeRestApi(
+            accounts_status=401,
+            accounts_body={"errors": [{"code": "Unauthorized", "message": "bad token"}]},
+        )
+
+        with pytest.raises(DerivRestError, match="Unauthorized"):
+            _call_rest(api, "list_accounts")
+
+    def test_plain_text_error_is_reported(self) -> None:
+        """Deriv répond `Invalid application` en texte brut sur un app id
+        inconnu. Un parseur qui n'accepterait que du JSON masquerait la seule
+        information utile du refus."""
+        api = _FakeRestApi(accounts_status=400, accounts_body="Invalid application")
+
+        with pytest.raises(DerivRestError, match="Invalid application"):
+            _call_rest(api, "list_accounts")
+
+    def test_json_error_without_an_errors_block_is_reported_verbatim(self) -> None:
+        """Corps JSON de forme inconnue : le rendre tel quel est la seule
+        option honnête. Le résumer sur une clé devinée masquerait le refus."""
+        api = _FakeRestApi(
+            accounts_status=403, accounts_body={"detail": "app id not registered"}
+        )
+
+        with pytest.raises(DerivRestError, match="app id not registered"):
+            _call_rest(api, "list_accounts")
+
+    def test_empty_error_body_still_names_the_call(self) -> None:
+        api = _FakeRestApi(accounts_status=500, accounts_body="")
+
+        with pytest.raises(DerivRestError, match="corps vide"):
+            _call_rest(api, "list_accounts")
+
+    def test_non_json_success_raises(self) -> None:
+        api = _FakeRestApi(accounts_body="pas du JSON")
+
+        with pytest.raises(DerivRestError, match="non JSON"):
+            _call_rest(api, "list_accounts")
+
+    def test_non_object_json_raises(self) -> None:
+        api = _FakeRestApi(accounts_body=["liste", "au", "lieu", "d'objet"])
+
+        with pytest.raises(DerivRestError, match="forme inattendue"):
+            _call_rest(api, "list_accounts")
+
+    def test_response_without_data_list_raises(self) -> None:
+        api = _FakeRestApi(accounts_body={"meta": {}})
+
+        with pytest.raises(DerivRestError, match="data"):
+            _call_rest(api, "list_accounts")
+
+    def test_non_dict_entries_are_dropped(self) -> None:
+        api = _FakeRestApi(accounts_body={"data": [DEMO_ACCOUNT, "bruit", None]})
+
+        assert _call_rest(api, "list_accounts") == [DEMO_ACCOUNT]
+
+    def test_otp_without_url_raises(self) -> None:
+        api = _FakeRestApi(otp_body={"data": {}})
+
+        with pytest.raises(DerivRestError, match="Aucune URL"):
+            _call_rest(api, "request_otp", "VRTC1234")
+
+    def test_otp_with_empty_url_raises(self) -> None:
+        api = _FakeRestApi(otp_body={"data": {"url": ""}})
+
+        with pytest.raises(DerivRestError, match="Aucune URL"):
+            _call_rest(api, "request_otp", "VRTC1234")
+
+
 class TestDemoAccountGuard:
-    def test_live_account_is_refused_before_any_order(self) -> None:
-        """Le refus doit intervenir à l'authentification, pas plus tard.
+    """Le refus doit intervenir AVANT l'OTP, donc avant toute connexion.
 
-        Ce script contourne le `RiskEngine` par construction : un ordre passé
-        sur un compte financé n'aurait aucun garde-fou en aval.
-        """
-        server = _FakeDerivServer(is_virtual=0)
+    Ce script contourne le `RiskEngine` par construction : un ordre passé sur un
+    compte financé n'aurait aucun garde-fou en aval.
+    """
 
-        with pytest.raises(LiveAccountRefused, match="is_virtual"):
-            asyncio.run(DerivTradingClient(server).authorize("token"))
+    def test_real_account_is_refused(self) -> None:
+        with pytest.raises(LiveAccountRefused, match="demo"):
+            select_demo_account([REAL_ACCOUNT], "CR1234")
 
-        assert all("buy" not in request for request in server.requests)
-
-    def test_missing_is_virtual_field_is_refused(self) -> None:
-        """Champ absent = non virtuel. Un défaut permissif transformerait une
+    def test_missing_account_type_is_refused(self) -> None:
+        """Champ absent = non démo. Un défaut permissif transformerait une
         réponse tronquée en autorisation de trader en réel."""
-        server = _FakeDerivServer(is_virtual=None)
+        with pytest.raises(LiveAccountRefused):
+            select_demo_account([{"account_id": "X1", "status": "active"}], "X1")
+
+    def test_no_demo_account_at_all_is_refused(self) -> None:
+        with pytest.raises(LiveAccountRefused, match="Aucun compte"):
+            select_demo_account([REAL_ACCOUNT])
+
+    def test_an_empty_account_list_is_refused(self) -> None:
+        with pytest.raises(LiveAccountRefused):
+            select_demo_account([])
+
+    def test_requested_account_must_be_in_the_list(self) -> None:
+        with pytest.raises(DerivRestError, match="absent"):
+            select_demo_account([DEMO_ACCOUNT], "INCONNU")
+
+    def test_a_single_active_demo_account_is_selected(self) -> None:
+        assert select_demo_account([REAL_ACCOUNT, DEMO_ACCOUNT]) == DEMO_ACCOUNT
+
+    def test_demo_account_that_is_not_active_is_refused(self) -> None:
+        dormant = {**DEMO_ACCOUNT, "status": "disabled"}
+
+        with pytest.raises(DerivRestError, match="aucun actif"):
+            select_demo_account([dormant])
+
+    def test_several_active_demo_accounts_demand_an_explicit_choice(self) -> None:
+        """Deux candidats sans consigne serait un choix arbitraire sur un compte
+        qui passe des ordres. On refuse plutôt que de deviner."""
+        second = {**DEMO_ACCOUNT, "account_id": "VRTC5678"}
+
+        with pytest.raises(DerivRestError, match="--account-id"):
+            select_demo_account([DEMO_ACCOUNT, second])
+
+    def test_explicit_choice_resolves_the_ambiguity(self) -> None:
+        second = {**DEMO_ACCOUNT, "account_id": "VRTC5678"}
+
+        assert select_demo_account([DEMO_ACCOUNT, second], "VRTC5678") == second
+
+    def test_a_real_ws_url_is_refused_even_when_the_account_declared_demo(self) -> None:
+        """`account_type` est déclaratif et lu AVANT l'OTP. Le chemin de l'URL
+        est ce que Deriv ouvre réellement — c'est lui qui fait foi."""
+        with pytest.raises(LiveAccountRefused, match="hors canal démo"):
+            assert_demo_ws_url(REAL_WS_URL, "VRTC1234")
+
+    def test_a_non_wss_url_is_refused(self) -> None:
+        with pytest.raises(LiveAccountRefused):
+            assert_demo_ws_url("https://api.derivws.com/trading/v1/options/ws/demo", "VRTC1234")
+
+    def test_a_demo_url_passes(self) -> None:
+        assert_demo_ws_url(DEMO_WS_URL, "VRTC1234")
+
+    def test_a_real_ws_url_aborts_before_any_websocket_is_opened(self) -> None:
+        api = _FakeRestApi(otp_url=REAL_WS_URL)
 
         with pytest.raises(LiveAccountRefused):
-            asyncio.run(DerivTradingClient(server).authorize("token"))
+            _open_session(api)
 
-    def test_virtual_account_is_accepted(self) -> None:
-        account = asyncio.run(DerivTradingClient(_FakeDerivServer()).authorize("token"))
+    def test_open_demo_session_carries_what_the_websocket_needs(self) -> None:
+        session = _open_session(_FakeRestApi())
 
-        assert account["is_virtual"] == 1
-        assert account["loginid"] == "VRTC1234"
+        assert session.account_id == "VRTC1234"
+        assert session.currency == "USD"
+        assert session.balance == 10_000.0
+        assert session.ws_url == DEMO_WS_URL
+
+    def test_a_missing_balance_does_not_stop_the_measurement(self) -> None:
+        """Le solde n'est que journalisé : il n'entre dans aucun calcul de coût."""
+        account = {k: v for k, v in DEMO_ACCOUNT.items() if k != "balance"}
+
+        session = _open_session(_FakeRestApi(accounts=[account]))
+
+        assert session.balance is None
+
+
+class TestOtpRedaction:
+    """L'URL renvoyée porte un secret d'authentification dans sa query.
+
+    La journaliser telle quelle publierait ce secret dans des logs de mesure —
+    qui, eux, n'ont aucune raison d'être protégés.
+    """
+
+    def test_the_otp_is_removed_from_a_redacted_url(self) -> None:
+        redacted = redact_otp(DEMO_WS_URL)
+
+        assert OTP not in redacted
+        assert redacted.endswith("/ws/demo?otp=***")
+
+    def test_a_url_without_query_is_left_intact(self) -> None:
+        url = "wss://api.derivws.com/trading/v1/options/ws/demo"
+
+        assert redact_otp(url) == url
+
+    def test_a_refused_url_is_reported_redacted(self) -> None:
+        with pytest.raises(LiveAccountRefused) as excinfo:
+            assert_demo_ws_url(REAL_WS_URL, "VRTC1234")
+
+        assert OTP not in str(excinfo.value)
+
+    def test_the_session_log_never_carries_the_raw_otp(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        caplog.set_level("INFO")
+        _patch_connect(monkeypatch, _FakeDerivServer(spots=[5800.0] * 10))
+
+        asyncio.run(
+            run_session(
+                token=TOKEN,
+                app_id=APP_ID,
+                symbol=SYMBOL,
+                direction=1,
+                stake_usd=10.0,
+                multiplier=100.0,
+                trades=1,
+                hold_seconds=0.0,
+                csv_path=tmp_path / "out.csv",
+                transport=_FakeRestApi().transport,
+            )
+        )
+
+        assert OTP not in caplog.text
+        assert TOKEN not in caplog.text
+        assert "otp=***" in caplog.text
 
 
 class TestRunParameters:
@@ -219,6 +505,14 @@ class TestProtocol:
         req_ids = [request["req_id"] for request in server.requests]
         assert len(req_ids) == len(set(req_ids))
 
+    def test_no_request_ever_carries_the_token(self) -> None:
+        """Le message `authorize` n'existe plus. Si un jeton repassait par le
+        WebSocket, ce serait une régression vers l'ancienne API."""
+        server = _FakeDerivServer()
+        _round_trip(server)
+
+        assert all("authorize" not in request for request in server.requests)
+
     def test_api_error_is_raised_not_swallowed(self) -> None:
         """Un achat refusé dont l'erreur serait absorbée produirait une ligne de
         CSV cohérente en forme et fausse en valeur."""
@@ -237,6 +531,17 @@ class TestProtocol:
         assert buy["price"] == 10.0
         assert buy["parameters"]["contract_type"] == "MULTUP"
         assert buy["parameters"]["multiplier"] == 100.0
+
+    def test_buy_names_the_instrument_underlying_symbol(self) -> None:
+        """La nouvelle API attend `underlying_symbol`. L'ancien `symbol` se
+        sérialise sans erreur et se fait refuser côté serveur : rupture
+        silencieuse, donc épinglée ici."""
+        server = _FakeDerivServer()
+        _round_trip(server)
+
+        buy = next(request for request in server.requests if "buy" in request)
+        assert buy["parameters"]["underlying_symbol"] == SYMBOL
+        assert "symbol" not in buy["parameters"]
 
     def test_direction_minus_one_buys_multdown(self) -> None:
         server = _FakeDerivServer()
@@ -460,13 +765,6 @@ class TestMalformedResponses:
     modèle sans jamais se signaler.
     """
 
-    def test_authorize_without_account_block_raises(self) -> None:
-        server = _FakeDerivServer()
-        server._reply = lambda payload: {"req_id": payload["req_id"]}  # type: ignore[method-assign]
-
-        with pytest.raises(DerivApiError, match="authorize"):
-            asyncio.run(DerivTradingClient(server).authorize("token"))
-
     def test_ticks_history_without_prices_raises(self) -> None:
         server = _FakeDerivServer()
         server._reply = lambda payload: {  # type: ignore[method-assign]
@@ -533,6 +831,39 @@ def _patch_connect(monkeypatch: pytest.MonkeyPatch, server: _FakeDerivServer) ->
 
 
 class TestSession:
+    def test_the_websocket_is_opened_on_the_url_returned_by_the_otp(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Aucune URL n'est reconstruite localement : celle de l'OTP porte déjà
+        le canal et le jeton de connexion."""
+        opened: list[str] = []
+        server = _FakeDerivServer(spots=[5800.0] * 10)
+
+        def _record(url: str, *a: object, **k: object) -> _FakeDerivServer:
+            opened.append(url)
+            return server
+
+        monkeypatch.setattr(
+            "scripts.measure_deriv_live_round_trip.websockets.connect", _record
+        )
+
+        asyncio.run(
+            run_session(
+                token=TOKEN,
+                app_id=APP_ID,
+                symbol=SYMBOL,
+                direction=1,
+                stake_usd=10.0,
+                multiplier=100.0,
+                trades=1,
+                hold_seconds=0.0,
+                csv_path=tmp_path / "out.csv",
+                transport=_FakeRestApi().transport,
+            )
+        )
+
+        assert opened == [DEMO_WS_URL]
+
     def test_successful_session_writes_every_round_trip(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
@@ -542,7 +873,8 @@ class TestSession:
 
         round_trips = asyncio.run(
             run_session(
-                token="token",
+                token=TOKEN,
+                app_id=APP_ID,
                 symbol=SYMBOL,
                 direction=1,
                 stake_usd=10.0,
@@ -550,6 +882,7 @@ class TestSession:
                 trades=3,
                 hold_seconds=0.0,
                 csv_path=path,
+                transport=_FakeRestApi().transport,
             )
         )
 
@@ -584,7 +917,8 @@ class TestSession:
 
         round_trips = asyncio.run(
             run_session(
-                token="token",
+                token=TOKEN,
+                app_id=APP_ID,
                 symbol=SYMBOL,
                 direction=1,
                 stake_usd=10.0,
@@ -592,6 +926,7 @@ class TestSession:
                 trades=5,
                 hold_seconds=0.0,
                 csv_path=path,
+                transport=_FakeRestApi().transport,
             )
         )
 
@@ -601,13 +936,16 @@ class TestSession:
     def test_a_live_account_aborts_the_session_before_any_order(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        server = _FakeDerivServer(is_virtual=0)
+        """Le refus tombe pendant le préambule REST : aucun WebSocket n'est même
+        ouvert, donc aucun ordre ne peut partir."""
+        server = _FakeDerivServer()
         _patch_connect(monkeypatch, server)
 
         with pytest.raises(LiveAccountRefused):
             asyncio.run(
                 run_session(
-                    token="token",
+                    token=TOKEN,
+                    app_id=APP_ID,
                     symbol=SYMBOL,
                     direction=1,
                     stake_usd=10.0,
@@ -615,10 +953,28 @@ class TestSession:
                     trades=5,
                     hold_seconds=0.0,
                     csv_path=tmp_path / "round_trips.csv",
+                    transport=_FakeRestApi(accounts=[REAL_ACCOUNT]).transport,
                 )
             )
 
-        assert all("buy" not in request for request in server.requests)
+        assert server.requests == []
+
+
+def _patch_rest(monkeypatch: pytest.MonkeyPatch, api: _FakeRestApi) -> None:
+    """Injecte le préambule REST doublé dans le `run_session` réel.
+
+    `main()` n'expose pas de transport — le lui ajouter serait un paramètre de
+    production dont seuls les tests se serviraient. On enveloppe donc l'appel,
+    ce qui laisse `main()` et `run_session` s'exécuter tels quels et garde les
+    codes de sortie authentiques.
+    """
+    module = "scripts.measure_deriv_live_round_trip"
+    real = run_session
+
+    async def _with_transport(**kwargs: Any) -> Any:
+        return await real(transport=api.transport, **kwargs)
+
+    monkeypatch.setattr(f"{module}.run_session", _with_transport)
 
 
 class TestCli:
@@ -629,11 +985,12 @@ class TestCli:
     @pytest.fixture(autouse=True)
     def _isolate_environment(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # Sans ça, `load_dotenv()` lirait le `.env` réel du dépôt et les tests
-        # dépendraient du token présent sur la machine.
+        # dépendraient des identifiants présents sur la machine.
         monkeypatch.setattr(
             "scripts.measure_deriv_live_round_trip.load_dotenv", lambda *a, **k: False
         )
         monkeypatch.delenv("DERIV_API_TOKEN", raising=False)
+        monkeypatch.delenv("DERIV_APP_ID", raising=False)
 
     def test_out_of_bounds_stake_exits_before_touching_the_network(
         self, monkeypatch: pytest.MonkeyPatch
@@ -650,38 +1007,76 @@ class TestCli:
     def test_missing_token_exits_without_connecting(self) -> None:
         assert main([]) == 2
 
+    def test_missing_app_id_exits_without_connecting(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """La nouvelle API rejette tout PAT sans `Deriv-App-ID`. Partir sans lui
+        échouerait au premier appel REST — autant le dire avant."""
+        monkeypatch.setenv("DERIV_API_TOKEN", TOKEN)
+
+        assert main([]) == 2
+
     def test_live_account_exits_with_its_own_code(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        monkeypatch.setenv("DERIV_API_TOKEN", "token")
-        _patch_connect(monkeypatch, _FakeDerivServer(is_virtual=0))
+        monkeypatch.setenv("DERIV_API_TOKEN", TOKEN)
+        monkeypatch.setenv("DERIV_APP_ID", APP_ID)
+        _patch_rest(monkeypatch, _FakeRestApi(accounts=[REAL_ACCOUNT]))
+        _patch_connect(monkeypatch, _FakeDerivServer())
 
         assert main(["--csv", str(tmp_path / "out.csv"), "--trades", "1"]) == 3
 
-    def test_api_error_exits_with_its_own_code(
+    def test_rest_refusal_exits_with_the_api_code(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        monkeypatch.setenv("DERIV_API_TOKEN", "token")
-        _patch_connect(monkeypatch, _FakeDerivServer(errors={"authorize": "InvalidToken"}))
+        monkeypatch.setenv("DERIV_API_TOKEN", TOKEN)
+        monkeypatch.setenv("DERIV_APP_ID", APP_ID)
+        _patch_rest(
+            monkeypatch,
+            _FakeRestApi(accounts_status=401, accounts_body="Invalid application"),
+        )
+        _patch_connect(monkeypatch, _FakeDerivServer())
 
         assert main(["--csv", str(tmp_path / "out.csv"), "--trades", "1"]) == 4
 
     def test_successful_run_exits_zero_and_writes_the_csv(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        monkeypatch.setenv("DERIV_API_TOKEN", "token")
+        monkeypatch.setenv("DERIV_API_TOKEN", TOKEN)
+        monkeypatch.setenv("DERIV_APP_ID", APP_ID)
+        _patch_rest(monkeypatch, _FakeRestApi())
         _patch_connect(monkeypatch, _FakeDerivServer(spots=[5800.0] * 10))
         path = tmp_path / "out.csv"
 
         assert main(["--csv", str(path), "--trades", "2", "--hold", "0"]) == 0
         assert len(list(csv.DictReader(path.open(encoding="utf-8")))) == 2
 
+    def test_an_explicit_account_id_reaches_the_selection(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """`--account-id` est le seul moyen de trancher entre deux comptes démo
+        actifs : s'il n'était pas transmis, la session resterait bloquée."""
+        monkeypatch.setenv("DERIV_API_TOKEN", TOKEN)
+        monkeypatch.setenv("DERIV_APP_ID", APP_ID)
+        second = {**DEMO_ACCOUNT, "account_id": "VRTC5678"}
+        _patch_rest(monkeypatch, _FakeRestApi(accounts=[DEMO_ACCOUNT, second]))
+        _patch_connect(monkeypatch, _FakeDerivServer(spots=[5800.0] * 10))
+        path = tmp_path / "out.csv"
+
+        exit_code = main(
+            ["--csv", str(path), "--trades", "1", "--hold", "0", "--account-id", "VRTC5678"]
+        )
+
+        assert exit_code == 0
+
     def test_a_run_without_any_round_trip_is_not_a_success(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         """Zéro aller-retour abouti ne doit pas sortir 0 : un shell qui enchaîne
         sur ce code croirait avoir une mesure."""
-        monkeypatch.setenv("DERIV_API_TOKEN", "token")
+        monkeypatch.setenv("DERIV_API_TOKEN", TOKEN)
+        monkeypatch.setenv("DERIV_APP_ID", APP_ID)
+        _patch_rest(monkeypatch, _FakeRestApi())
         _patch_connect(monkeypatch, _FakeDerivServer(errors={"buy": "MarketIsClosed"}))
 
         assert main(["--csv", str(tmp_path / "out.csv"), "--trades", "1", "--hold", "0"]) == 1

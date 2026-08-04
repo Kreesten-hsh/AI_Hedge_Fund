@@ -143,6 +143,8 @@ L'ordre d'implémentation est strictement linéaire (Pipeline Quantitatif).
 - **Priorité** : Bloquante — condition préalable absolue à toute future campagne de signal
 - **Statut** : À FAIRE (Outil `scripts/run_feature_research.py` disponible et testé)
 - **Raison** : L'omission de cette étape sur SIG-01 et SIG-02 a conduit à entraîner des modèles sur des features au pouvoir prédictif mesuré nul (ADR 0024).
+- **Corroboration externe** : L'étude statistique indépendante de Berko (2026, 15M ticks sur MT5 Demo, HMM + test Poisson post-spike) confirme l'absence d'edge exploitable court terme après coûts sur Boom/Crash 1000. Voir [EXTERNAL_FINDINGS_SPIKE_HYPOTHESIS.md](file:///mnt/WindowsData/AI_Hedge_Fund/docs/research/EXTERNAL_FINDINGS_SPIKE_HYPOTHESIS.md).
+
 
 ### KRO-01 : Kronos-mini (Phase 4) — SUSPENDU
 - **Objectif** : Substituer un modèle de séquence à LightGBM.

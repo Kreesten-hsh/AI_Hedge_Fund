@@ -11,7 +11,14 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-_SRC = Path(__file__).resolve().parent.parent / "src"
+_ROOT = Path(__file__).resolve().parent.parent
+_SRC = _ROOT / "src"
 
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
+
+# `scripts/` n'est pas un paquet installé : sans la racine dans `sys.path`, un
+# script reste intestable et le gate « une fonctionnalité non testée est
+# inexistante » ne peut pas s'appliquer à du code qui route des ordres réels.
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))

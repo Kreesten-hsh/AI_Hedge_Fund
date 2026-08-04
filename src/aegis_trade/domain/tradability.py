@@ -22,13 +22,13 @@ from typing import Sequence
 from aegis_trade.domain.costs import TransactionCostModel
 
 
-def absolute_moves(prices: Sequence[float], horizon: int) -> list[float]:
-    """Mouvements absolus en fraction du prix, sur fenêtres glissantes.
+def _forward_returns(prices: Sequence[float], horizon: int) -> list[float]:
+    """Rendements signés sur fenêtres glissantes, en fraction du prix.
 
-    :param horizon: Nombre de barres de détention. Doit être >= 1.
-    :raises ValueError: horizon non positif, prix insuffisants, ou prix non
-        strictement positif (un prix nul ou négatif rend le rendement indéfini,
-        et le laisser passer produirait une division silencieusement fausse).
+    Primitive commune aux deux lectures d'un horizon : `absolute_moves` en jette
+    le signe pour mesurer un péage (symétrique), l'oracle d'exposition le garde
+    pour choisir un sens. Les deux partagent volontairement ce seul site de
+    validation — dupliquer les gardes les ferait diverger en silence.
     """
     if horizon < 1:
         raise ValueError(f"horizon doit être >= 1 (reçu {horizon}).")
@@ -38,13 +38,24 @@ def absolute_moves(prices: Sequence[float], horizon: int) -> list[float]:
             "aucune fenêtre complète, mesure impossible."
         )
 
-    moves: list[float] = []
+    returns: list[float] = []
     for i in range(len(prices) - horizon):
         start = prices[i]
         if start <= 0.0:
             raise ValueError(f"Prix non strictement positif à l'indice {i} : {start}.")
-        moves.append(abs((prices[i + horizon] / start) - 1.0))
-    return moves
+        returns.append((prices[i + horizon] / start) - 1.0)
+    return returns
+
+
+def absolute_moves(prices: Sequence[float], horizon: int) -> list[float]:
+    """Mouvements absolus en fraction du prix, sur fenêtres glissantes.
+
+    :param horizon: Nombre de barres de détention. Doit être >= 1.
+    :raises ValueError: horizon non positif, prix insuffisants, ou prix non
+        strictement positif (un prix nul ou négatif rend le rendement indéfini,
+        et le laisser passer produirait une division silencieusement fausse).
+    """
+    return [abs(r) for r in _forward_returns(prices, horizon)]
 
 
 def tradable_window_ratio(
@@ -119,3 +130,79 @@ def is_horizon_tradable(
     if not 0.0 < min_ratio <= 1.0:
         raise ValueError(f"min_ratio doit être dans ]0, 1] (reçu {min_ratio}).")
     return tradable_window_ratio(prices, horizon, cost_model, safety_margin) >= min_ratio
+
+
+def oracle_target_exposure(
+    prices: Sequence[float],
+    horizon: int,
+    cost_model: TransactionCostModel,
+    safety_margin: float = 1.0,
+) -> list[int]:
+    """Exposition cible qu'une `MLStrategy` déclarerait avec une prédiction parfaite.
+
+    Reproduit exactement la règle de décision de
+    `MLStrategy.generate_signals` : `>= +seuil` long (1), `<= -seuil` short (-1),
+    entre les deux PLAT (0). La zone morte n'est pas un silence, c'est l'ordre de
+    sortir — c'est ce qui rend la sortie dépendante de la persistance du signal
+    plutôt que de l'horizon du label.
+
+    Un élément par fenêtre complète : les `horizon` dernières barres n'ont pas de
+    rendement futur, l'oracle n'y a donc aucun avis à porter.
+    """
+    threshold = cost_model.breakeven_return(safety_margin=safety_margin)
+    exposure: list[int] = []
+    for forward_return in _forward_returns(prices, horizon):
+        if forward_return >= threshold:
+            exposure.append(1)
+        elif forward_return <= -threshold:
+            exposure.append(-1)
+        else:
+            exposure.append(0)
+    return exposure
+
+
+def oracle_holding_periods(
+    prices: Sequence[float],
+    horizon: int,
+    cost_model: TransactionCostModel,
+    safety_margin: float = 1.0,
+) -> list[int]:
+    """Durées de détention, en barres, d'une sortie par persistance du signal.
+
+    Répond à la question laissée ouverte par SIG-02 : « horizon du label » n'est
+    pas « durée de détention ». `tradable_window_ratio` mesure une sortie
+    TEMPORELLE — `absolute_moves` compare `t+horizon` à `t`, donc suppose la
+    position fermée à la barre `t+horizon`. `MLStrategy` ne fait pas ça : elle
+    réémet une exposition cible à chaque barre et sort quand le signal retombe
+    dans la zone morte ou change de sens. La détention est donc la longueur des
+    séquences d'exposition non nulle constante, mesurée ici.
+
+    Chaque élément est une détention distincte, donc un aller-retour distinct.
+    Une liste vide signifie qu'aucune position n'est jamais ouverte — pas qu'une
+    position dure zéro barre.
+
+    Ce que cette mesure EST : la structure de persistance du label lui-même,
+    calculable sans entraîner quoi que ce soit. Ce qu'elle n'est PAS : une borne
+    sur la détention d'un modèle réel. Le bruit de prédiction fragmente
+    typiquement les séquences, mais peut aussi en souder deux — aucune
+    inégalité n'est démontrée dans ce sens et aucune n'est revendiquée ici.
+    """
+    periods: list[int] = []
+    current_side = 0
+    current_length = 0
+
+    for side in oracle_target_exposure(prices, horizon, cost_model, safety_margin):
+        if side == current_side:
+            current_length += 1
+            continue
+        # Changement de sens comme retour au plat : la position en cours se
+        # ferme. Un passage long -> short est deux aller-retours, jamais une
+        # détention continue.
+        if current_side != 0:
+            periods.append(current_length)
+        current_side = side
+        current_length = 1
+
+    if current_side != 0:
+        periods.append(current_length)
+    return periods

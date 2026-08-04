@@ -33,9 +33,20 @@ class MLStrategy(IStrategy):
 
     **Exposition cible, pas impulsion d'entrée.** Chaque barre porte une cible
     complète : long (1), short (-1) ou PLAT (0). La zone morte n'est pas un
-    silence, c'est l'ordre de sortir. C'est ce qui rend l'horizon de détention
-    cohérent avec l'horizon de prédiction : le modèle ne prédit qu'une barre, il
-    ne fonde donc aucune conviction au-delà de la barre suivante.
+    silence, c'est l'ordre de sortir.
+
+    **La détention n'est PAS l'horizon du label** — elle en est indépendante par
+    construction. Le modèle prédit `forward_return_N` ; la position, elle, se
+    ferme quand le signal retombe dans la zone morte ou change de sens, ce qui
+    peut arriver avant ou longtemps après la N-ième barre. Le seuil d'entrée
+    reste cohérent (rendement attendu contre coût d'un aller-retour), la sortie
+    ne l'est pas mécaniquement. Voir
+    `docs/ADR/0023-signal-persistence-exit-validated.md` : la détention médiane
+    d'un oracle vaut exactement l'horizon sur Crash 1000 (5 barres) et Boom 1000
+    (10 barres), ce qui valide cette sortie POUR CES SÉRIES — une marche sans
+    mémoire à exposition égale tombe à 0.60 et 0.30 fois l'horizon. La propriété
+    est mesurée, pas garantie : elle est à re-mesurer avant tout nouvel
+    instrument ou horizon (`scripts/diagnose_signal_persistence.py`).
 
     Cette conception est sans état : la stratégie n'assure aucun suivi de la
     position réelle, elle déclare seulement l'exposition qu'elle veut. Le

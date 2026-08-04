@@ -119,6 +119,13 @@ marge n'est pas viable.
 plus serré et n'atteint la même robustesse qu'à **10 barres** (25.0 % à 5 barres
 avec marge 3x).
 
+> **REVALIDÉ par l'ADR 0022.** Cette table est mesurée sur 5000 barres M1
+> (~3.5 jours, un seul régime). Recalculée sur **75000 barres (52 jours)** après
+> l'ingestion paginée, elle tient à ~1 point près : horizon 1 à 5.8 % (contre
+> 6.2 %), horizons 2-3 toujours fragiles à la marge, Crash robuste à 5 barres
+> (94.0 % à marge 3x), Boom à 10 barres (87.2 %). Les verdicts sont inchangés ;
+> ce sont les valeurs de l'ADR 0022 qui font désormais référence.
+
 ## Décision
 
 **1. Coût A/R retenu : 0.745 bps sur Crash 1000, 1.063 bps sur Boom 1000.**

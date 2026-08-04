@@ -123,10 +123,25 @@ décisions fréquentes au lieu de le sacrifier à un chiffre supposé.
 ~52 jours par requête contre ~3.5 en M1. La pagination reste disponible si un
 horizon court exige une granularité fine.
 
+> **RENVERSÉ par l'ADR 0021 — la mesure de départage tient, sa conclusion
+> opérationnelle non.** Le coût A/R réel mesuré vaut 0.745 bps, d'où une cible
+> de **5 barres M1 (5 minutes)**, non représentable en M15 dont la barre
+> minimale vaut 15 minutes. Garder le M15 triplerait la détention par contrainte
+> de format de données au lieu d'une mesure. DATA-01 repasse en **pagination
+> M1**. L'équivalence de budget à ±3 % au-delà de 15 min reste vraie et rend le
+> M15 réutilisable si une cible ≥15 min réapparaît — c'est bien la clause
+> « si un horizon court exige une granularité fine » ci-dessus qui se déclenche.
+
 **4. Mesurer le coût Deriv réel devient un prérequis explicite de SIG-02**, à
 faire hors API publique (compte réel : spread affiché plus commission de
 multiplier). Tant qu'il manque, aucune valeur de coût n'est câblée : la table de
 budget est publiée, la ligne à retenir sera choisie quand le chiffre existera.
+
+> **RÉSOLU par l'ADR 0021.** Coût A/R mesuré : **0.745 bps** sur Crash 1000,
+> **1.063 bps** sur Boom 1000, par aller-retours immédiats sur compte démo. Deux
+> précisions sur la formulation ci-dessus : il n'y a **pas de spread** (flux à
+> prix unique, ce que `ticks_history` indiquait déjà), et la commission est
+> prélevée **une fois** par aller-retour, pas deux.
 
 ## Conséquences
 

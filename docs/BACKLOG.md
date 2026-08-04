@@ -55,41 +55,40 @@ L'ordre d'implémentation est strictement linéaire (Pipeline Quantitatif).
 ### DATA-01 : Historique Crash 1000 suffisant pour valider un horizon long
 - **Objectif** : Ingérer un historique nettement plus long que les 5000 barres M1 actuelles, spécifiquement pour Crash 1000.
 - **Priorité** : Critique — bloque SIG-02
-- **Statut** : TRANCHÉ — route M15 retenue (ADR 0020). Ingestion à faire.
+- **Statut** : RE-TRANCHÉ — route **pagination M1** retenue (ADR 0021, renverse l'ADR 0020). Ingestion à faire.
 - **Raison** : à un horizon de 240 barres, 1500 barres de test ne donnent que ~6 fenêtres indépendantes. Re-tester SIG-02 sur ce jeu reproduirait le même défaut de puissance statistique : un résultat, quel qu'il soit, ne serait pas concluant.
 - **Contrainte technique** : `DerivHistoricalData.fetch_candles` plafonne à **5000 bougies par requête** (`historical_data.py:38`, `end: "latest"`). Relancer `scripts/fetch_training_data.py` avec un `count` plus grand ne suffit donc pas — l'API refuse. Deux routes, toutes deux vérifiées ouvertes :
-  1. **Pagination** — reculer `end` dans le temps puis concaténer et dédupliquer. **Testé, fonctionne.** Lève le plafond sans changer de granularité.
-  2. **Granularité plus grossière** — sous le même plafond, le M15 couvre ~52 jours contre ~3.5 jours en M1. **Testé, fonctionne** (`data/market_data/crash1000_m15.parquet`).
-- **Mesure de départage** (ADR 0020) : à détention égale et **sur période commune**, le budget de coût M15 égale le M1 à ±3 % de 15 min à 8 h. Passer en M15 ne rétrécit donc pas la cible économique. Attention : comparées sur leurs étendues natives, les mêmes séries montrent −23 % à 8 h — un effet de régime, pas d'agrégation.
-- **Réserve encore OUVERTE** : la mesure de départage compare des mouvements de bout en bout et est **aveugle au chemin intra-fenêtre par construction**. Elle ne dit rien sur la capacité de features calculées en M15 à voir les spikes de Crash 1000. Cette question se tranche côté features, dans SIG-02.
+  1. **Pagination** — reculer `end` dans le temps puis concaténer et dédupliquer. **Testé, fonctionne.** Lève le plafond sans changer de granularité. **← route retenue.**
+  2. **Granularité plus grossière** — sous le même plafond, le M15 couvre ~52 jours contre ~3.5 jours en M1. **Testé, fonctionne** (`data/market_data/crash1000_m15.parquet`). Écartée : voir ci-dessous.
+- **Pourquoi le M15 est écarté après avoir été retenu** : l'ADR 0020 avait choisi le M15 sur la base d'un budget de coût équivalent à ±3 % **à partir de 15 min de détention**. La cible mesurée est désormais **5 barres M1, soit 5 minutes** (ADR 0021), qui n'est pas représentable en M15 — la barre minimale y vaut 15 min. Le M15 imposerait donc de tripler la détention par contrainte de format de données, pas par mesure. La pagination donne la même profondeur d'historique sans ce compromis (~52 jours de M1 = ~15 requêtes).
+- **Mesure de départage conservée** (ADR 0020) : à détention égale et **sur période commune**, le budget de coût M15 égale le M1 à ±3 % de 15 min à 8 h. Ce résultat reste valide et rend le M15 réutilisable si une cible ≥15 min réapparaît. Attention : comparées sur leurs étendues natives, les mêmes séries montrent −23 % à 8 h — un effet de régime, pas d'agrégation.
+- **Réserve devenue sans objet pour la cible actuelle** : la question « des features M15 voient-elles encore les spikes ? » ne se pose plus en pagination M1. Elle redevient ouverte si le M15 revient.
 
 ### COST-01 : Mesurer le coût de transaction Deriv réel
 - **Objectif** : Obtenir le coût aller-retour réel sur Crash 1000 et Boom 1000.
 - **Priorité** : Critique — prérequis de SIG-02
-- **Statut** : BLOQUÉ — toutes les routes automatisables sont fermées, mesure manuelle requise
-- **Prérequis oublié, à trancher d'abord** : **quel produit ?** Les deux ont des structures de coût non interchangeables.
-  | Produit | Structure |
-  |---|---|
-  | Deriv Trader — multipliers | commission = notionnel × taux, notionnel = mise × multiplicateur |
-  | Deriv MT5 — CFD | spread en points + commission par lot |
-  Mesurer le mauvais produit donne un chiffre exact et inutilisable.
-- **Routes fermées, vérifiées** :
-  - API WebSocket Deriv : `active_symbols` renvoie 0 symbole (`clients_country: bj`), ce qui ferme en cascade `contracts_for`, `proposal` et `ticks`. Seul `ticks_history` répond, et il ne renvoie qu'un prix unique — jamais bid/ask (ADR 0020).
-  - REST public : `api.deriv.com/api-explorer/data/active_symbols.json` renvoie **HTTP 403**.
-  - Specs publiées : `deriv.com/trading-specifications` est rendue côté client, **0 occurrence de « crash »** dans le HTML servi, aucun endpoint de données exposé. Deriv ne publie pas le taux de commission par instrument et renvoie explicitement au ticket de trade.
-  - **MT5 (`scripts/ingest_mt5.py`)** : deux blocages indépendants. (1) `MT5_SERVER = MetaQuotes-Demo` est le serveur démo générique de MetaQuotes, **pas** un serveur Deriv — il ne porte ni CRASH1000 ni BOOM1000. (2) Le paquet pip `MetaTrader5` est Windows-only et l'hôte de développement est Linux. Cette route redevient viable sur un compte Deriv-MT5 depuis Windows.
-- **Relevé manuel — multipliers** : ticket Deriv Trader, Crash 1000, onglet Multipliers. Noter **mise**, **multiplicateur**, **commission** affichés, puis :
-  `coût A/R en bps = 2 × (commission / (mise × multiplicateur)) × 10000`
-  Le multiplicateur s'annule : P&L = mise × M × variation%, commission = mise × M × taux, donc le coût exprimé en rendement vaut `2 × taux` quel que soit M. Le chiffre est directement comparable à la table de budget de l'ADR 0020.
-- **Relevé manuel — MT5 CFD** : spread en points et commission par lot, à convertir en bps du notionnel.
-- **Usage** : le chiffre obtenu se lit directement dans la table de budget de l'ADR 0020 (`scripts/diagnose_cost_budget_by_horizon.py`) pour fixer l'horizon cible. Aucune re-mesure nécessaire. Aucune estimation ne sera câblée en attendant — un chiffre supposé est exactement le défaut corrigé par l'ADR 0018.
+- **Statut** : COMPLETED (ADR 0021)
+- **Résultat** : **0.745 bps A/R sur Crash 1000**, **1.063 bps sur Boom 1000**. Soit ~40x moins que les 30 bps du `SimulatedBroker` qui structuraient la planification.
+- **Produit retenu** : Deriv Trader **multipliers** (commission = notionnel × taux). Le CFD MT5 (spread en points + commission par lot) est un produit distinct aux coûts non interchangeables — mesurer le mauvais aurait donné un chiffre exact et inutilisable.
+- **Fait que seule la mesure pouvait établir** : la commission est prélevée **une seule fois** par aller-retour (rapport mesuré 1.18-1.24x la commission affichée), pas deux. La formule `2 × taux` proposée en session est **réfutée** — elle aurait faussé d'un facteur 2 le chiffre qui décide de l'horizon.
+- **Pas de spread** : les synthétiques Deriv sont cotés sur un flux à prix unique, confirmé indépendamment par `ticks_history` qui ne renvoie jamais bid/ask. Rien à chercher dans l'interface.
+- **Relevé versionné** : `scripts/measure_deriv_round_trip_cost.py` porte les 5 aller-retours bruts par instrument, la reconstruction du sens par contrainte physique et la conversion. Réexécutable.
+- **Usage en CLI** — les défauts du `SimulatedBroker` restent inchangés (broker générique, pas adaptateur Deriv ; 522 tests en dépendent) :
+  ```
+  --commission-rate 0.00003725 --slippage-bps 0.0    # Crash 1000, A/R 0.745 bps
+  --commission-rate 0.00005315 --slippage-bps 0.0    # Boom 1000,  A/R 1.063 bps
+  ```
+  Slippage nul : il est déjà inclus dans la mesure, l'ajouter le compterait deux fois.
+- **Routes automatisables, toutes vérifiées fermées** : API WebSocket (`active_symbols` = 0 symbole, `clients_country: bj`) ; REST public en HTTP 403 ; `deriv.com/trading-specifications` rendue côté client (0 occurrence de « crash » dans le HTML servi) ; MT5 bloqué deux fois — `MT5_SERVER = MetaQuotes-Demo` ne porte pas les synthétiques Deriv, et le paquet `MetaTrader5` est Windows-only alors que l'hôte est Linux. Cette dernière route redevient viable sur un compte Deriv-MT5 depuis Windows.
+- **Réserve** : mesure sur compte **démo**, 5 trades, une session, multiplicateur x100 seulement. À revérifier avant tout passage en réel.
 
 ### SIG-02 : Redéfinition de l'horizon cible
 - **Objectif** : Mesurer la faisabilité économique AVANT d'entraîner, puis re-tester l'hypothèse « signal exploitable » à un horizon où l'espace économique existe.
 - **Priorité** : Critique — bloque la Phase 4
 - **Statut** : PLANNED
-- **Prérequis** : DATA-01 **et** COST-01. Ne pas lancer SIG-02 sur les 5000 barres actuelles.
-- **Cible** : la fenêtre « 60-240 barres M1 » de l'ADR 0019 est **retirée** — elle découlait des 30 bps supposés du `SimulatedBroker`, pas d'une mesure. Viser l'horizon le plus COURT dont le budget dépasse le coût réel, ce qui préserve l'objectif de décisions fréquentes. Ordre de grandeur mesuré : ~9.5 bps de budget à 15 min de détention, ~29.5 bps à 1 h (20 % de fenêtres).
+- **Prérequis** : DATA-01. COST-01 est **résolu** (ADR 0021).
+- **Cible** : **5 barres M1 sur Crash 1000** (ADR 0021). Premier horizon robuste au choix de marge : 93.3 % de fenêtres tradables même à marge 3x, au coût réel de 0.745 bps. 5 minutes de détention — cohérent avec l'objectif de décisions fréquentes, contre les 4 heures de la fenêtre 60-240 retirée à l'ADR 0020. Boom 1000 est plus serré : 10 barres.
+- **Horizons écartés et pourquoi** : 1 barre reste **réfuté** (6.2 % de fenêtres même au coût réel — l'ADR 0019 tient, désormais sur mesure). 2 et 3 barres sont **fragiles à la marge** : le ratio s'effondre de 98.7 % à 10.0 % entre marge 1.0x et 2.0x à 2 barres. Un horizon dont la viabilité dépend d'un paramètre non dérivé n'est pas viable — le retenir serait du gate-adjusting (ADR 0018).
 - **Outil** : `aegis_trade.domain.tradability` (`tradable_window_ratio`, `is_horizon_tradable`, `max_viable_round_trip_cost`) + `scripts/diagnose_cost_budget_by_horizon.py` et `scripts/diagnose_horizon_vs_cost.py`. Le gate passe AVANT tout entraînement : le budget est un plafond atteignable par un oracle, donc un budget sous le coût réel réfute l'horizon sans dépenser de temps de calcul.
 - **Déblocage technique fait** : l'horizon du label n'est plus câblé. `DatasetBuilder(horizon=N)` étiquette à `forward_return_N` (nom dérivé de l'horizon pour que deux campagnes d'horizons différents ne se confondent pas dans le registre), et `scripts/train_qlib_model.py --horizon N` l'expose. Horizon < 1 refusé (0 = fuite, négatif = passé). La fuite de cible reste couverte : `model_factory._feature_matrix` exclut `dataset.target_col` par son nom exact, pas seulement la constante.
 - **Reste à trancher côté stratégie** : **« horizon du label » ≠ « durée de détention »**. `MLStrategy` déclare une exposition cible à chaque barre ; avec `horizon=15`, le modèle prédit un rendement à 15 barres mais la détention effective est dictée par la persistance du signal. Le seuil d'entrée reste cohérent (rendement attendu vs coût A/R), mais la sortie n'est pas alignée sur l'horizon. À décider dans SIG-02, pas par défaut.

@@ -1,0 +1,115 @@
+{
+    "context": {
+        "seed": 42,
+        "git_version": "2618c50",
+        "strategy_version": "MLStrategy",
+        "config_version": "v1",
+        "data_hash": "87c0129bf7792ea2",
+        "timestamp": "2026-08-04T14:36:42.963222+00:00"
+    },
+    "report": {
+        "campaigns": [
+            {
+                "campaign_type": "hold_out",
+                "metrics": {
+                    "sharpe_ratio": -0.4616,
+                    "max_drawdown": 0.1508,
+                    "net_return": -0.149721
+                },
+                "passed": false,
+                "details": {
+                    "symbol": "CRASH1000",
+                    "timeframe": "M1",
+                    "ratio": 0.2
+                }
+            },
+            {
+                "campaign_type": "walk_forward",
+                "metrics": {
+                    "sharpe_ratio": -0.4657,
+                    "win_rate": 0.3027,
+                    "net_return": -0.149868,
+                    "max_drawdown": 0.0494
+                },
+                "passed": false,
+                "details": {
+                    "symbol": "CRASH1000",
+                    "timeframe": "M1",
+                    "folds_evaluated": 5,
+                    "fold_returns": [
+                        -0.037896,
+                        -0.043147,
+                        -0.022861,
+                        -0.042583,
+                        -0.012898
+                    ]
+                }
+            },
+            {
+                "campaign_type": "monte_carlo",
+                "metrics": {
+                    "ruin_probability": 0.0,
+                    "median_net_return": -0.150178,
+                    "loss_probability": 1.0,
+                    "expected_shortfall": -0.21637
+                },
+                "passed": false,
+                "details": {
+                    "iterations": 1000,
+                    "trades_sampled": 3618,
+                    "min_trades_required": 30,
+                    "shortfall_quantile": 0.05
+                }
+            },
+            {
+                "campaign_type": "benchmark",
+                "metrics": {
+                    "alpha": -0.1146,
+                    "beta": 0.537,
+                    "strategy_sharpe": -0.4616,
+                    "benchmark_sharpe": -0.0851,
+                    "net_return": -0.149721
+                },
+                "passed": false,
+                "details": {
+                    "benchmarks_run": [
+                        "buy_and_hold"
+                    ],
+                    "strategy_return": -0.1497,
+                    "benchmark_return": -0.0351
+                }
+            }
+        ],
+        "strategy_score": 0.0,
+        "is_approved": false
+    },
+    "parameters": {
+        "config": {
+            "active_campaigns": [
+                "hold_out",
+                "walk_forward",
+                "monte_carlo",
+                "benchmark"
+            ],
+            "seed": 42,
+            "train_ratio": 0.6,
+            "val_ratio": 0.2,
+            "test_ratio": 0.2,
+            "monte_carlo_iterations": 10000,
+            "monte_carlo_level": 1,
+            "markets": [
+                {
+                    "name": "CRASH1000",
+                    "asset_class": "indices"
+                }
+            ],
+            "timeframes": [
+                "M1"
+            ],
+            "benchmarks": [
+                "buy_and_hold",
+                "random"
+            ]
+        }
+    }
+}

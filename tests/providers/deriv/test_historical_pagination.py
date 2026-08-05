@@ -235,3 +235,54 @@ class TestPagination:
             DerivHistoricalData().fetch_candles_paginated_sync(
                 symbol=SYMBOL, target_count=200, granularity=60, page_size=100
             )
+
+    def test_partial_page_does_not_stop_pagination_if_new_bars_exist(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Une page intermédiaire comportant moins de bougies qu'une page pleine (ex: tranche de début de semaine)
+        ne doit pas arrêter la pagination tant que de nouvelles barres inédites sont reçues (added > 0).
+        """
+        page1 = _candles_message(BASE_EPOCH + 2000 * 60, 500)   # Page partielle (500 barres)
+        page2 = _candles_message(BASE_EPOCH, 1000)             # Page suivante (1000 barres)
+        connection = _patch_connect(monkeypatch, [page1, page2])
+
+        df = DerivHistoricalData().fetch_candles_paginated_sync(
+            symbol="frxXAUUSD", target_count=1500, granularity=60, page_size=5000
+        )
+
+        assert len(df) == 1500
+        assert len(connection.sent) == 2
+
+
+    def test_weekend_snapping_skips_market_close(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Quand le plus ancien timestamp d'un bloc est Lundi 00:00:00 UTC,
+        le curseur end du bloc suivant doit sauter le week-end et viser le Vendredi précédent à 20:59:00 UTC.
+        """
+        from aegis_trade.providers.deriv.historical_data import _is_weekend_close, _snap_to_friday_close
+
+        # Lundi 2026-08-03 00:00:00 UTC
+        monday_dt = datetime(2026, 8, 3, 0, 0, 0, tzinfo=timezone.utc)
+        monday_epoch = int(monday_dt.timestamp())
+
+        # Dimanche 2026-08-02 23:59:00 UTC (recul de 60s) -> est en week-end
+        sunday_dt = datetime.fromtimestamp(monday_epoch - 60, tz=timezone.utc)
+        assert _is_weekend_close(sunday_dt) is True
+
+        # Snap au vendredi précédent -> 2026-07-31 20:59:00 UTC
+        snapped_dt = _snap_to_friday_close(sunday_dt)
+        assert snapped_dt == datetime(2026, 7, 31, 20, 59, 0, tzinfo=timezone.utc)
+
+        # Simulation de pagination avec un bloc démarrant lundi 00:00
+        page1 = _candles_message(monday_epoch, 100)  # Lundi 00:00 -> 01:40
+        page2 = _candles_message(int(snapped_dt.timestamp()) - 100 * 60, 100)
+        connection = _patch_connect(monkeypatch, [page1, page2])
+
+        df = DerivHistoricalData().fetch_candles_paginated_sync(
+            symbol="frxXAUUSD", target_count=200, granularity=60, page_size=100
+        )
+
+        assert len(df) == 200
+        assert connection.sent[1]["end"] == str(int(snapped_dt.timestamp()))
+

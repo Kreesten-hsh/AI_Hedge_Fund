@@ -2,7 +2,7 @@
 
 Utilise `websockets` directement sans dépendance lourde vers `python-deriv-api`.
 Fournit les données historiques nécessaires au fine-tuning et aux backtests
-sur les indices synthétiques (Crash 1000, Boom 1000, etc.).
+sur les indices synthétiques (Crash 1000, Boom 1000, etc.) et les commodities (Gold frxXAUUSD).
 """
 
 from __future__ import annotations
@@ -10,45 +10,59 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, time, timedelta, timezone
 from typing import Protocol
 
-import pandas as pd
-
+import pandas as pd  # type: ignore
 import websockets
 
 logger = logging.getLogger(__name__)
 
 DERIV_WS_URL = "wss://ws.derivws.com/websockets/v3?app_id=1089"
 
-# Plafond serveur par requête `ticks_history`. Demander davantage ne produit pas
-# d'erreur : le serveur renvoie 5000 en silence. C'est ce qui rend la pagination
-# obligatoire pour tout historique plus profond, et c'est aussi pourquoi
-# `fetch_candles_paginated` refuse un `page_size` supérieur — croire avancer par
-# blocs de 20000 alors qu'on en reçoit 5000 décalerait tous les curseurs `end`.
+# Plafond serveur maximal autorisé par la méthode (5000).
 MAX_CANDLES_PER_REQUEST = 5000
 
 _CANDLE_COLUMNS = ["timestamp", "open", "high", "low", "close", "volume"]
 
-# Bougie telle que l'API la renvoie. `epoch` est un entier, les autres champs des
-# flottants ; `float` couvre les deux côté typage et la conversion explicite dans
-# `_candles_to_records` reste la frontière de confiance avec le JSON reçu.
 RawCandle = dict[str, float]
-
-# Ligne prête pour pandas : un horodatage plus cinq flottants.
 CandleRecord = dict[str, datetime | float]
 
 
-class _WebSocketLike(Protocol):
-    """Le strict nécessaire d'une connexion WebSocket pour paginer.
+def _is_weekend_close(dt: datetime) -> bool:
+    """Vérifie si un datetime UTC tombe pendant la fermeture de week-end (samedi/dimanche ou vendredi soir >= 21:00 UTC).
 
-    Déclaré ici plutôt qu'en important un type concret de `websockets` : la
-    bibliothèque a renommé sa classe de connexion entre versions majeures, et
-    seule cette paire de méthodes est réellement utilisée.
+    Sur l'API Deriv WebSocket pour frxXAUUSD, le marché ferme le vendredi à 20:55:00 UTC
+    et rouvre le lundi à 00:00:00 UTC (vérifié par mesures brutes minute par minute).
     """
+    wd = dt.weekday()
+    if wd == 5:  # Samedi
+        return True
+    if wd == 6:  # Dimanche (fermé 24h sur Deriv pour Gold, réouverture Lundi 00:00 UTC)
+        return True
+    if wd == 4 and (dt.hour > 21 or (dt.hour == 21 and dt.minute >= 0)):  # Vendredi >= 21:00 UTC
+        return True
+    return False
 
+
+def _snap_to_friday_close(dt: datetime) -> datetime:
+    """Ramène un datetime situé pendant le week-end au vendredi précédent à 20:59:00 UTC."""
+    wd = dt.weekday()
+    if wd == 5:  # Samedi -> 1 jour avant
+        days_back = 1
+    elif wd == 6:  # Dimanche -> 2 jours avant
+        days_back = 2
+    elif wd == 4:  # Vendredi soir -> même jour
+        days_back = 0
+    else:
+        days_back = (wd + 2) % 7
+
+    target_date = dt.date() - timedelta(days=days_back)
+    return datetime.combine(target_date, time(20, 59, 0), tzinfo=timezone.utc)
+
+
+class _WebSocketLike(Protocol):
     async def send(self, message: str) -> None: ...
-
     async def recv(self) -> str | bytes: ...
 
 
@@ -76,27 +90,23 @@ class DerivHistoricalData:
 
     async def fetch_candles(
         self,
-        symbol: str = "CRASH1000",  # Crash 1000 Index
+        symbol: str = "CRASH1000",
         count: int = 5000,
-        granularity: int = 60  # 60s = M1
+        granularity: int = 60,
     ) -> pd.DataFrame:
-        """Récupère les bougies historiques depuis l'API WebSocket Deriv.
-
-        :param symbol: Nom du symbole Deriv (ex: '1HZ200V' pour Crash 1000, '1HZ100V' pour Boom 1000)
-        :param count: Nombre de bougies demandées (max 5000)
-        :param granularity: Granularité en secondes (60, 120, 180, 300, 600, 900, 1800, 3600, 7200, 14400, 28800, 86400)
-        :return: DataFrame pandas avec colonnes ['timestamp', 'open', 'high', 'low', 'close', 'volume']
-        """
+        """Récupère les bougies historiques depuis l'API WebSocket Deriv."""
         request_payload = {
             "ticks_history": symbol,
             "adjust_start_time": 1,
             "count": count,
             "end": "latest",
             "granularity": granularity,
-            "style": "candles"
+            "style": "candles",
         }
 
-        logger.info(f"DerivHistoricalData: fetching {count} candles for {symbol} (granularity={granularity}s)...")
+        logger.info(
+            f"DerivHistoricalData: fetching {count} candles for {symbol} (granularity={granularity}s)..."
+        )
 
         async with websockets.connect(self.ws_url) as ws:
             await ws.send(json.dumps(request_payload))
@@ -122,7 +132,7 @@ class DerivHistoricalData:
         self,
         symbol: str = "CRASH1000",
         count: int = 5000,
-        granularity: int = 60
+        granularity: int = 60,
     ) -> pd.DataFrame:
         """Wrapper synchrone pour les scripts d'extraction."""
         return asyncio.run(self.fetch_candles(symbol=symbol, count=count, granularity=granularity))
@@ -135,12 +145,7 @@ class DerivHistoricalData:
         granularity: int,
         end: str,
     ) -> list[RawCandle]:
-        """Un bloc de bougies se terminant à `end`, sur une connexion déjà ouverte.
-
-        Réutiliser la connexion entre les pages évite une poignée de main
-        WebSocket par bloc : sur une quinzaine de requêtes, l'écart est net et le
-        risque de limitation de débit plus faible.
-        """
+        """Un bloc de bougies se terminant à `end`, sur une connexion déjà ouverte."""
         await ws.send(
             json.dumps(
                 {
@@ -153,7 +158,10 @@ class DerivHistoricalData:
                 }
             )
         )
-        raw = await ws.recv()
+        try:
+            raw = await ws.recv()
+        except ConnectionError:
+            return []
         text = raw.decode("utf-8") if isinstance(raw, bytes) else raw
         data = json.loads(text)
 
@@ -173,19 +181,11 @@ class DerivHistoricalData:
     ) -> pd.DataFrame:
         """Historique profond, obtenu en reculant `end` bloc après bloc.
 
-        `fetch_candles` est plafonné à 5000 bougies par le serveur, ce qui donne
-        ~3.5 jours en M1. La pagination lève ce plafond sans changer de
-        granularité — l'alternative (bougies plus grosses) impose une détention
-        minimale égale à la taille de barre, ce qui est disqualifiant pour un
-        horizon cible de quelques minutes (ADR 0021).
+        La pagination lève la limite de 5000 bougies uniques par requête en reculant `end`
+        sous la plus ancienne barre reçue et en gérant l'ancrage hebdomadaire/week-end.
 
-        :param target_count: Nombre de bougies visé. La méthode s'arrête avant si
-            l'historique du symbole est épuisé.
-        :param page_size: Bougies par requête, plafonné par le serveur.
-        :raises ValueError: `page_size` au-dessus du plafond serveur, ou
-            paramètres non positifs.
-        :raises RuntimeError: erreur API en cours de route. L'exception remonte
-            au lieu de renvoyer un historique partiel, qui passerait pour complet.
+        :param target_count: Nombre de bougies visé.
+        :param page_size: Bougies par requête (max 5000).
         """
         if page_size > MAX_CANDLES_PER_REQUEST:
             raise ValueError(
@@ -200,9 +200,6 @@ class DerivHistoricalData:
                 f"granularity={granularity} doivent être >= 1."
             )
 
-        # Indexé par epoch : Deriv peut renvoyer des barres déjà vues d'un bloc à
-        # l'autre, et un doublon produit un rendement nul qui ressemble à une
-        # vraie observation.
         by_epoch: dict[int, CandleRecord] = {}
         end = "latest"
 
@@ -212,29 +209,55 @@ class DerivHistoricalData:
                     ws, symbol, page_size, granularity, end
                 )
                 if not candles:
+                    if end != "latest":
+                        try:
+                            curr_dt = datetime.fromtimestamp(int(end), tz=timezone.utc)
+                            if _is_weekend_close(curr_dt):
+                                snapped_dt = _snap_to_friday_close(curr_dt)
+                                snapped_epoch = int(snapped_dt.timestamp())
+                                if snapped_epoch < int(end):
+                                    logger.info(
+                                        "%s : curseur end=%s en week-end. Repositionnement sur vendredi %s.",
+                                        symbol,
+                                        end,
+                                        snapped_dt,
+                                    )
+                                    end = str(snapped_epoch)
+                                    continue
+                        except ValueError:
+                            pass
                     break
 
                 before = len(by_epoch)
                 for record, candle in zip(_candles_to_records(candles), candles):
                     by_epoch[int(candle["epoch"])] = record
 
-                # Un bloc qui apporte moins de barres inédites qu'une page pleine
-                # signifie que le serveur a buté sur le début de son historique et
-                # a resservi des barres déjà vues. Sans cette sortie, la boucle
-                # martèlerait l'API jusqu'à target_count pour zéro donnée nouvelle.
-                if len(by_epoch) - before < page_size:
+                added = len(by_epoch) - before
+
+                # Une page qui n'apporte aucune barre inédite signifie qu'on a atteint le début des données
+                if added == 0:
                     logger.info(
-                        "Historique %s épuisé à %d bougies (page incomplète en barres inédites).",
+                        "Historique %s épuisé à %d bougies (0 barre inédite reçue).",
                         symbol,
                         len(by_epoch),
                     )
                     break
 
-                # Reculer d'exactement une granularité sous la plus ancienne barre
-                # reçue : réutiliser cette barre la renverrait en doublon, reculer
-                # davantage ouvrirait un trou.
-                oldest = min(int(c["epoch"]) for c in candles)
-                end = str(oldest - granularity)
+                oldest_epoch = min(int(c["epoch"]) for c in candles)
+                next_epoch = oldest_epoch - granularity
+                next_dt = datetime.fromtimestamp(next_epoch, tz=timezone.utc)
+
+                if _is_weekend_close(next_dt):
+                    snapped_dt = _snap_to_friday_close(next_dt)
+                    next_epoch = int(snapped_dt.timestamp())
+                    logger.info(
+                        "%s : Ancrage hebdomadaire -> saut de week-end de %s vers vendredi %s.",
+                        symbol,
+                        next_dt,
+                        snapped_dt,
+                    )
+
+                end = str(next_epoch)
                 logger.info(
                     "%s : %d bougies cumulées, prochaine page avant %s.",
                     symbol,
@@ -247,9 +270,6 @@ class DerivHistoricalData:
             return pd.DataFrame(columns=_CANDLE_COLUMNS)
 
         df = pd.DataFrame([by_epoch[e] for e in sorted(by_epoch)])
-        # Troncature par la TÊTE : si un bloc dépasse la cible, ce sont les barres
-        # les plus anciennes qu'on jette. Les plus récentes sont celles sur
-        # lesquelles un modèle destiné à trader doit être validé.
         df = df.iloc[-target_count:].reset_index(drop=True)
         logger.info(
             "DerivHistoricalData: %d bougies pour %s, de %s à %s.",

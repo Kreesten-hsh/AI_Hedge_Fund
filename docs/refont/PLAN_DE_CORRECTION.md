@@ -109,7 +109,7 @@ Objectif : que le kill switch et le tableau de bord parlent de la même somme d'
 | Grandeur | Implémentations actuelles | Cible |
 |---|---|---|
 | Indicateurs / ATR | ✅ **FAIT** — 4 impl. divergentes, mesurées contre la référence Wilder 1978 : `utils/math.py:114` (exacte), `infrastructure/features/technical_extractor.py:141` (`ewm` sans amorce, 13 barres de warmup fausses sans NaN), `application/reflection/extractor.py:90` (moyenne simple du TR, +6,6 %), `engine/ai_decision_engine.py:50` (`mean(high - low)`, aucun True Range, −9,5 %) | `utils/math.compute_atr` fait autorité, les 3 autres l'appellent |
-| PnL réalisé | `engine/portfolio.py:92-93`, `engine/backtester.py:180-188`, `application/monitoring/engine.py:126-129` | `engine/portfolio.py` fait autorité |
+| PnL réalisé | ✅ **FAIT** — 4 sites (pas 3), 3 conventions de signe : `engine/portfolio.py:92,106` (exact, dupliqué en interne), `engine/backtester.py:180-188` (exact), `application/monitoring/engine.py:126-129` (**signe inversé sur tout SHORT**) | `engine.portfolio.compute_realized_pnl` fait autorité, les 3 autres l'appellent |
 | Equity | `engine/portfolio.py:165`, `application/monitoring/engine.py:100` | idem |
 | Annualisation | `engine/portfolio.py:227`, `engine/performance.py:70,74` | `engine/performance.py` fait autorité |
 | Verdict → ordre | `application/council/orchestrator.py:72-91`, `application/validation/council_adapter.py:82-95` | un seul convertisseur |
@@ -155,6 +155,42 @@ fait partie du périmètre** — ce projet trade Crash 1000, Boom 1000 et Gold s
 d'une piste antérieure, pas une donnée de production périmée. Non suivi par git, il n'entre dans aucun
 gate et ne pollue pas le dépôt : laissé en place. L'inventaire des fichiers morts du Lot 6 n'a pas à
 rouvrir la question de savoir si EURUSD est redevenu pertinent — il ne l'est pas.
+
+### Corrections apportées à ce plan lui-même (grandeur PnL réalisé)
+
+Le tableau annonçait trois implémentations à dédupliquer. La mesure contre une référence
+comptable indépendante, sur les quatre combinaisons direction × issue, en a trouvé **quatre**,
+dont une fausse :
+
+- `engine/portfolio.py` duplique sa propre formule **deux fois** (clôture partielle `:92`,
+  retournement de position `:106`). Le tableau n'en comptait qu'une.
+- `application/monitoring/engine.py:126` produisait **l'opposé exact** du PnL de tout SHORT.
+  Cause : `PositionSnapshot.quantity` est stockée signée (`:114`, `quantity=ev.volume`), et le
+  calcul lui appliquait **en plus** un `multiplier = -1` pour un SHORT. Double inversion.
+  Effet de bord du même défaut : le garde `pos.quantity > 0` échouait sur une quantité négative,
+  donc `realized_pnl_percent` valait `0` pour tout short — et `:178` classe la mémoire du Council
+  sur `SUCCESS if realized_pnl_percent > 0 else FAILURE`. **Tout short gagnant serait archivé en
+  FAILURE** dans le corpus d'apprentissage. Ce n'était pas une duplication de code identique.
+- L'autorité impose une **quantité absolue** (`ValueError` sinon) : la direction est portée par
+  `is_long` seul. C'est ce qui rend la double inversion structurellement impossible, pas un
+  commentaire.
+- Le paramètre de type de `compute_realized_pnl` est contraint à `Decimal | float` : le
+  `Backtester` est en float de bout en bout, le `Portfolio` en Decimal. Convertir l'un vers
+  l'autre aurait déplacé des arrondis dans des chiffres déjà couverts par des tests.
+
+**`trades_history['pnl']` du Backtester n'est pas une quatrième implémentation.** Elle est nette
+de commission (18,50 quand le PnL brut vaut 20,00) et alimente `PerformanceEngine` pour le win
+rate, le profit factor et l'expectancy — qui doivent être nets, sinon le tearsheet compte gagnante
+une transaction que les frais rendent perdante. Grandeur distincte, conservée, désormais nommée
+`net_pnl` et documentée au lieu d'être un commentaire de fin de ligne.
+
+**Portée réelle du défaut aujourd'hui.** La branche `elif ev.action == "closed"` de
+`monitoring/engine.py` est **inatteignable en production** : le seul émetteur de `PositionEvent`
+dans `src/` (`infrastructure/paper/broker.py:230`) n'émet que `"opened"` et `"updated"`, et
+`TradeEvent` n'est construit nulle part dans `src/`. Le bug était donc latent, atteint uniquement
+par les tests — dont aucun ne couvrait le SHORT. Il se serait activé au premier adaptateur broker
+émettant une fermeture. **Ce trou d'émission est un défaut fonctionnel distinct, non traité ici :
+il sort du mandat « une seule implémentation par grandeur » et appartient au Lot 6.**
 
 ---
 

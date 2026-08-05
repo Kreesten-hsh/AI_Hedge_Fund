@@ -1,11 +1,44 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
+from typing import TypeVar
 import pandas as pd
 import numpy as np
 
 from aegis_trade.domain import Symbol
 from aegis_trade.engine.events import FillEvent, MarketEvent, OrderAction
+
+Number = TypeVar("Number", Decimal, float)
+
+
+def compute_realized_pnl(
+    entry_price: Number,
+    exit_price: Number,
+    quantity_closed: Number,
+    is_long: bool,
+) -> Number:
+    """Autorité unique du PnL réalisé, brut de frais (Lot 3).
+
+    Quatre sites calculaient cette grandeur, dont trois avec une convention de
+    signe qui leur était propre. `application/monitoring/engine.py` combinait un
+    `quantity` déjà signé avec un multiplicateur de direction : la double
+    inversion rendait le PnJ de tout SHORT exactement opposé au bon, et le PnL
+    en pourcentage nul (le garde `quantity > 0` échoue sur un signé négatif).
+    Le corpus de mémoire du Council classait donc tout short gagnant en FAILURE.
+
+    `quantity_closed` est une quantité absolue : la direction est portée par
+    `is_long` seul, jamais par le signe de la quantité. C'est la contrainte qui
+    rend la double inversion structurellement impossible.
+
+    Le paramètre de type est contraint à `Decimal | float` pour que chaque
+    appelant conserve son arithmétique d'origine : le `Backtester` est en float
+    de bout en bout, le `Portfolio` en Decimal. Convertir l'un vers l'autre ici
+    déplacerait des arrondis dans des chiffres déjà validés par des tests.
+    """
+    if quantity_closed < 0:
+        raise ValueError(f"quantity_closed doit être absolue, reçu {quantity_closed}")
+    delta = (exit_price - entry_price) if is_long else (entry_price - exit_price)
+    return delta * quantity_closed
 
 
 @dataclass
@@ -89,8 +122,12 @@ class Portfolio:
                 # Decreasing or reversing position (Realizing PnL)
                 if abs(fill_qty) <= abs(pos.volume):
                     # Partial or full close
-                    pnl_per_unit = (fill_price - pos.average_price) if pos.volume > 0 else (pos.average_price - fill_price)
-                    realized_pnl = abs(fill_qty) * pnl_per_unit
+                    realized_pnl = compute_realized_pnl(
+                        entry_price=pos.average_price,
+                        exit_price=fill_price,
+                        quantity_closed=abs(fill_qty),
+                        is_long=pos.volume > 0,
+                    )
                     pos.realized_pnl += realized_pnl
                     self._closed_trades_pnl.append(realized_pnl)
                     
@@ -105,8 +142,12 @@ class Portfolio:
                 else:
                     # Reversing position
                     # 1. Close current position
-                    pnl_per_unit = (fill_price - pos.average_price) if pos.volume > 0 else (pos.average_price - fill_price)
-                    realized_pnl = abs(pos.volume) * pnl_per_unit
+                    realized_pnl = compute_realized_pnl(
+                        entry_price=pos.average_price,
+                        exit_price=fill_price,
+                        quantity_closed=abs(pos.volume),
+                        is_long=pos.volume > 0,
+                    )
                     self._closed_trades_pnl.append(realized_pnl)
                     
                     # Cash adjustments for closing

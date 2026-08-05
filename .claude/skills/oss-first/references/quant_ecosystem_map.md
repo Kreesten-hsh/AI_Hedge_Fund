@@ -5,7 +5,7 @@ liste figée. Statut vérifié indiqué par entrée — à revérifier si l'entr
 n'a pas été confirmée dans les 6 derniers mois.
 
 ## Indicateurs techniques
-- **pandas-ta-classic** [NON vérifié 05/08/2026 — recherche web sans résultat] — mentionné comme fork communautaire actif de pandas-ta (l'original, twopirllc, affiche lui-même un risque d'arrêt faute de soutien). Décrit comme 193+ indicateurs, 62 patterns de chandeliers, aucune dépendance TA-Lib requise, accélération optionnelle via numba (6-230× sur les indicateurs coûteux — pertinent vu le CPU dual-core). Candidat potentiel pour remplacer utils/math.py MAIS nécessite vérification GitHub (dernière activité, mainteneurs, licence) avant usage.
+- **pandas-ta-classic** [`xgboosted/pandas-ta-classic`, vérifié 05/08/2026 par clone direct] — 55 contributeurs, commits actifs jusqu'au 23/07/2026, process PR visible, licence MIT. Fork communautaire créé en réponse à un changement de direction suspect de l'original (twopirllc) : historique PyPI effacé, identité du mainteneur changée, pivot vers un modèle payant mi-2025, signalé par la communauté comme potentiellement inquiétant (voir issue #30 du repo). **Recommandation : éviter complètement le paquet pandas-ta original (`twopirllc` / `pip install pandas_ta`), utiliser pandas-ta-classic si adopté.** 193+ indicateurs, 62 patterns de chandeliers, aucune dépendance TA-Lib requise, accélération optionnelle via numba (6-230× sur les indicateurs coûteux — pertinent vu le CPU dual-core). Candidat direct pour remplacer utils/math.py.
 - TA-Lib (C, wrapper Python) — plus rapide en théorie, mais dépendance compilée, à peser contre la contrainte matérielle. Non revérifié aujourd'hui pour l'état de maintenance actuel.
 
 ## Analyse de facteurs / IC

@@ -148,6 +148,14 @@ utilisaient la version exacte, `scripts/compute_feature_ic.py` et `scripts/compu
 Après régénération, `atr_14` conserve un |t| de 0,055 à 0,297 sur Crash/Boom × h5/h10 contre un seuil
 de 2,0, et le décompte de survivants reste 0/25 : **l'ADR 0024 n'est pas affecté.**
 
+**FeatureStore EURUSD_M5 — hors périmètre, à ne pas ré-instruire.** `data/features/` contient un
+FeatureStore daté du 24/07 porteur de l'ancienne approximation, non régénéré. Il est orphelin à deux
+titres : ses barres source ne sont pas dans le dépôt (donc non reconstructible), et **EURUSD n'a jamais
+fait partie du périmètre** — ce projet trade Crash 1000, Boom 1000 et Gold sur Deriv. C'est un résidu
+d'une piste antérieure, pas une donnée de production périmée. Non suivi par git, il n'entre dans aucun
+gate et ne pollue pas le dépôt : laissé en place. L'inventaire des fichiers morts du Lot 6 n'a pas à
+rouvrir la question de savoir si EURUSD est redevenu pertinent — il ne l'est pas.
+
 ---
 
 ## LOT 4 — PIPELINE SCIENTIFIQUE RÉEL

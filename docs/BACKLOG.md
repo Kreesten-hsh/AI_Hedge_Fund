@@ -182,7 +182,7 @@ point 1), déduplication `Verdict → ordre`, déduplication `DatasetBuilder`, p
   pipeline ML. Si l'infrastructure a un défaut structurel, il vaut mieux le découvrir sur un troisième
   actif que sur un nettoyage de Lot 6 ou un pipeline reconstruit.
 - **Priorité** : Haute — succède à l'annualisation (Lot 3), précède l'audit Council/ML
-- **Statut** : À FAIRE
+- **Statut** : REJETÉ (ADR 0025 — coût A/R mesuré à 1.818 bps tout compris, 0/25 features significatives à H5, gate de tradabilité non franchi)
 - **Pourquoi maintenant** : Crash 1000 et Boom 1000 sont mesurés de bout en bout (DATA-01, COST-01,
   COST-02, ADR 0021→0024). Gold ne l'a jamais été. Les deux instruments mesurés sont des **synthétiques
   Deriv** — deux membres de la même famille. Un troisième actif de famille différente est ce qui

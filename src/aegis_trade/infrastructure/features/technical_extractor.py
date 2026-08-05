@@ -5,6 +5,7 @@ from typing import List, Sequence
 from aegis_trade.domain.core import MarketBar
 from aegis_trade.domain.features import FeatureSet, FeatureMetadata, FeatureGroup
 from aegis_trade.domain.ports.features import IFeatureExtractor
+from aegis_trade.utils.math import compute_atr
 
 
 class TechnicalFeatureExtractor(IFeatureExtractor):
@@ -138,11 +139,19 @@ class TechnicalFeatureExtractor(IFeatureExtractor):
         df['macd_hist'] = df['macd'] - df['macd_signal']
 
         # 5. Volatility (ATR 14, Std 20, Historical Volatility)
-        tr1 = high - low
-        tr2 = (high - close.shift(1)).abs()
-        tr3 = (low - close.shift(1)).abs()
-        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-        df['atr_14'] = tr.ewm(alpha=1/14, adjust=False).mean()
+        # ATR délégué à utils.math.compute_atr — autorité numérique unique
+        # (Wilder 1978). L'ancien `ewm(alpha=1/14)` sans amorce SMA démarrait à
+        # l'indice 0 et servait 13 barres fausses sans NaN pour les signaler.
+        df['atr_14'] = pd.Series(
+            compute_atr(
+                high.to_numpy(dtype=float),
+                low.to_numpy(dtype=float),
+                close.to_numpy(dtype=float),
+                14,
+            ),
+            index=df.index,
+            dtype=float,
+        )
         
         df['std_20'] = close.rolling(window=20).std()
         df['hist_vol_20'] = df['log_return'].rolling(window=20).std() * np.sqrt(252)

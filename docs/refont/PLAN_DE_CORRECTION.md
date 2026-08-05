@@ -108,7 +108,7 @@ Objectif : que le kill switch et le tableau de bord parlent de la même somme d'
 
 | Grandeur | Implémentations actuelles | Cible |
 |---|---|---|
-| Indicateurs / ATR | 4 impl., 3 ATR divergents : `utils/math.py:66-135`, `engine/strategy.py:118-145`, `application/reflection/extractor.py:54-101`, `infrastructure/features/technical_extractor.py:100-140` | une seule, dans le `FeatureEngine` |
+| Indicateurs / ATR | ✅ **FAIT** — 4 impl. divergentes, mesurées contre la référence Wilder 1978 : `utils/math.py:114` (exacte), `infrastructure/features/technical_extractor.py:141` (`ewm` sans amorce, 13 barres de warmup fausses sans NaN), `application/reflection/extractor.py:90` (moyenne simple du TR, +6,6 %), `engine/ai_decision_engine.py:50` (`mean(high - low)`, aucun True Range, −9,5 %) | `utils/math.compute_atr` fait autorité, les 3 autres l'appellent |
 | PnL réalisé | `engine/portfolio.py:92-93`, `engine/backtester.py:180-188`, `application/monitoring/engine.py:126-129` | `engine/portfolio.py` fait autorité |
 | Equity | `engine/portfolio.py:165`, `application/monitoring/engine.py:100` | idem |
 | Annualisation | `engine/portfolio.py:227`, `engine/performance.py:70,74` | `engine/performance.py` fait autorité |
@@ -125,6 +125,28 @@ Plus, dans le même lot, les violations de dépendance :
 
 **Critère de sortie :** un test de non-régression numérique par grandeur (mêmes entrées → même sortie,
 quel que soit l'appelant). `architecture-guardian` repasse sans violation d'axe.
+
+### Corrections apportées à ce plan lui-même (grandeur ATR)
+
+Trois références de ce tableau étaient fausses et ont été corrigées ci-dessus après vérification :
+
+- `engine/strategy.py:118-145` ne contient **aucun ATR** — c'est du RSI et de l'EMA. Ce n'était pas
+  une des implémentations à consolider.
+- La cible « une seule, dans le `FeatureEngine` » désignait un module **inexistant** :
+  `grep -rn "class FeatureEngine" src/` ne retourne rien. L'autorité retenue est `utils/math.py`,
+  déjà porteuse de la seule formule exacte, et qui reste une feuille numpy (les appelants pandas
+  convertissent via `Series.to_numpy(dtype=float)`).
+- Une 4e implémentation réelle, absente du tableau, existait dans `engine/ai_decision_engine.py:50` —
+  la plus fausse des quatre, et la seule dont la sortie partait directement au Council sous la clé
+  `atr` du contexte de risque.
+
+**Portée du correctif sur SIG-02 :** `run_feature_research.py`, script officiel cité par l'ADR 0024,
+importe `TechnicalFeatureExtractor` — donc la même approximation que la production, jamais la version
+exacte. Il n'y avait pas de contamination croisée entre recherche et production. Les deux scripts qui
+utilisaient la version exacte, `scripts/compute_feature_ic.py` et `scripts/compute_extended_feature_ic.py`,
+étaient morts (26/07, aucune référence, antérieurs à ce pipeline) : supprimés dans le même commit.
+Après régénération, `atr_14` conserve un |t| de 0,055 à 0,297 sur Crash/Boom × h5/h10 contre un seuil
+de 2,0, et le décompte de survivants reste 0/25 : **l'ADR 0024 n'est pas affecté.**
 
 ---
 

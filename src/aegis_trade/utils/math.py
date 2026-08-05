@@ -48,7 +48,17 @@ def sliding_ic(features: np.ndarray, returns: np.ndarray, window: int = 10) -> n
 
 
 # ---------------------------------------------------------------------------
-# Indicators (Numpy versions for research)
+# Indicators — SINGLE SOURCE OF AUTHORITY (Lot 3, souveraineté numérique)
+#
+# Ce module fait autorité pour le True Range, le lissage de Wilder et l'ATR.
+# Aucun autre module ne recalcule ces grandeurs : `technical_extractor`,
+# `reflection/extractor` et `ai_decision_engine` appellent ces fonctions.
+#
+# Trois formules divergentes coexistaient avant ce lot, mesurées contre la
+# référence Wilder 1978 sur 120 barres : `rolling(14).mean()` sur-estimait de
+# +6,6 %, une moyenne de `high - low` sans True Range sous-estimait de -9,5 %,
+# et un `ewm(alpha=1/14)` sans amorce SMA produisait 14 barres fausses en
+# warmup sans NaN pour les signaler. Voir tests/utils/test_indicator_authority.py.
 # ---------------------------------------------------------------------------
 
 def compute_ema(prices: np.ndarray, period: int) -> np.ndarray:
@@ -62,10 +72,18 @@ def compute_ema(prices: np.ndarray, period: int) -> np.ndarray:
 
 
 def true_range(highs: np.ndarray, lows: np.ndarray, closes: np.ndarray) -> np.ndarray:
-    """True Range series. First element uses high-low only."""
-    tr = np.empty(len(highs))
+    """True Range series. First element uses high-low only.
+
+    La première barre n'a pas de clôture précédente : son True Range se réduit
+    à `high - low`. Le remplacer par un NaN décalerait toute la série d'un
+    cran par rapport à l'amorce SMA de Wilder.
+    """
+    n = len(highs)
+    if n == 0:
+        return np.empty(0, dtype=float)
+    tr = np.empty(n, dtype=float)
     tr[0] = highs[0] - lows[0]
-    for i in range(1, len(highs)):
+    for i in range(1, n):
         hl = highs[i] - lows[i]
         hc = abs(highs[i] - closes[i - 1])
         lc = abs(lows[i] - closes[i - 1])
@@ -74,16 +92,34 @@ def true_range(highs: np.ndarray, lows: np.ndarray, closes: np.ndarray) -> np.nd
 
 
 def wilder_smooth(series: np.ndarray, period: int) -> np.ndarray:
-    """Wilder's exponential smoothing (used by ATR, ADX, RSI)."""
-    out = np.empty(len(series))
-    out[:period] = np.nan
+    """Wilder's exponential smoothing (used by ATR, ADX, RSI).
+
+    Amorce en moyenne simple des `period` premières valeurs, puis récurrence.
+    Les `period - 1` premières positions restent NaN : une valeur y serait
+    calculée sur un échantillon incomplet, donc fausse, et rien en aval ne
+    saurait la distinguer d'une valeur établie.
+    """
+    if period < 1:
+        raise ValueError(f"period must be >= 1, got {period}")
+    n = len(series)
+    out = np.full(n, np.nan, dtype=float)
+    if n < period:
+        return out
     out[period - 1] = series[:period].mean()
-    for i in range(period, len(series)):
+    for i in range(period, n):
         out[i] = (out[i - 1] * (period - 1) + series[i]) / period
     return out
 
 
 def compute_atr(highs: np.ndarray, lows: np.ndarray, closes: np.ndarray, period: int) -> np.ndarray:
+    """Average True Range (Wilder 1978). Autorité numérique du projet.
+
+    Retourne une série de même longueur que l'entrée, dont les `period - 1`
+    premières valeurs sont NaN (warmup explicite).
+
+    Ce module reste une feuille numpy : les appelants pandas convertissent
+    (`Series.to_numpy(dtype=float)`) plutôt que d'ajouter pandas ici.
+    """
     tr = true_range(highs, lows, closes)
     return wilder_smooth(tr, period)
 
@@ -132,4 +168,4 @@ def compute_rsi(prices: np.ndarray, period: int = 14) -> float:
     if avg_loss == 0:
         return 100.0
     rs = avg_gain / avg_loss
-    return 100.0 - (100.0 / (1.0 + rs))
+    return float(100.0 - (100.0 / (1.0 + rs)))

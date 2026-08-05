@@ -3,6 +3,29 @@
 Ce document liste les missions structurées de l'OS de trading. Il sert de plan de travail séquentiel.
 L'ordre d'implémentation est strictement linéaire (Pipeline Quantitatif).
 
+## TRAJECTOIRE COURANTE — arrêtée le 2026-08-05
+
+```
+Annualisation (Lot 3) ──► GOLD-01 ──► [PAUSE, ÉVALUATION] ──► audit Council/ML  ou  pivot
+```
+
+1. **Annualisation** — dernière grandeur du Lot 3 exécutable sans ouvrir le Council. Zone métrique
+   pure, `engine/performance.py` fait autorité. Voir `docs/refont/PLAN_DE_CORRECTION.md`, §
+   « Séquencement interne du Lot 3 ».
+2. **GOLD-01** — troisième actif réel sur l'outillage existant. Valide l'infrastructure (ingestion,
+   coût, exécution) **avant** d'y greffer du ML. Deux prérequis mesurés, détaillés dans la mission :
+   les données Gold actuelles sont du D1 OpenBB, pas du M1 Deriv, et le coût de Gold n'est pas
+   transposable depuis les synthétiques.
+3. **PAUSE explicite.** GOLD-01 est un point de décision, pas une étape à traverser. Si Gold valide
+   l'infrastructure → audit du Council, puis dégel de « Verdict → ordre », `DatasetBuilder` et de la
+   violation `domain/council.py:5`. Si Gold révèle un défaut structurel → on pivote, et le nettoyage
+   du Lot 6 comme la reconstruction d'un pipeline ML attendent.
+
+Ce qui reste **gelé** jusqu'à cette évaluation : audit du Council (deux Councils coexistent, Lot 6
+point 1), déduplication `Verdict → ordre`, déduplication `DatasetBuilder`, pureté du domaine
+(`domain/council.py:5`). Gelé ≠ abandonné : **Lot 3 complet reste prérequis obligatoire avant AI-07b
+(argent réel).**
+
 ## Phase 1 : Cœur du Moteur de Simulation
 
 ### BT-01 : Modular Backtesting Engine (Backtest Core)
@@ -150,6 +173,56 @@ L'ordre d'implémentation est strictement linéaire (Pipeline Quantitatif).
 - **Objectif** : Substituer un modèle de séquence à LightGBM.
 - **Statut** : SUSPENDU — Un meilleur modèle sur des features sans pouvoir prédictif mesuré est déjà réfuté par l'ADR 0019 et l'ADR 0024.
 - **Raison** : sur `forward_return_1`, un meilleur modèle prédirait plus précisément une grandeur trop petite pour être tradée. Gain de précision réel, gain économique nul (ADR 0019). Sur SIG-02, 0/25 features ont du signal (ADR 0024).
+
+
+### GOLD-01 : Troisième actif réel — valider l'infrastructure avant d'y greffer du ML
+
+- **Objectif** : mesurer Gold de bout en bout sur l'outillage existant (ingestion Deriv → coût A/R réel
+  → gate de tradabilité → backtest baseline), **avant** d'auditer le Council ou de reconstruire un
+  pipeline ML. Si l'infrastructure a un défaut structurel, il vaut mieux le découvrir sur un troisième
+  actif que sur un nettoyage de Lot 6 ou un pipeline reconstruit.
+- **Priorité** : Haute — succède à l'annualisation (Lot 3), précède l'audit Council/ML
+- **Statut** : À FAIRE
+- **Pourquoi maintenant** : Crash 1000 et Boom 1000 sont mesurés de bout en bout (DATA-01, COST-01,
+  COST-02, ADR 0021→0024). Gold ne l'a jamais été. Les deux instruments mesurés sont des **synthétiques
+  Deriv** — deux membres de la même famille. Un troisième actif de famille différente est ce qui
+  distingue « l'infrastructure marche » de « l'infrastructure marche sur des synthétiques ».
+- **Aucune refonte** : `fetch_candles_paginated` (DATA-01), `measure_deriv_live_round_trip.py` (COST-02),
+  `domain/tradability` et `run_feature_research.py` existent, sont testés, et prennent l'instrument en
+  paramètre. GOLD-01 est une campagne de mesure, pas une construction.
+
+**Deux prérequis, tous deux mesurés — Gold n'est PAS outillé aujourd'hui :**
+
+1. **Les données actuelles ne conviennent pas.** `data/market_data/xauusd.parquet` contient **122 barres
+   D1** (2026-02-05 → 2026-07-31), sourcées **OpenBB** (`scripts/fetch_training_data.py:81-102`), pas
+   Deriv. Contre 75000 barres M1 Deriv pour Crash/Boom. Backtester Gold sur ce fichier ne testerait ni
+   la source de production, ni la granularité cible, ni la puissance statistique exigée par DATA-01 —
+   ce serait mesurer un autre système. **Action : ingérer Gold en M1 via `fetch_candles_paginated`**,
+   au symbole Deriv correspondant (à résoudre dans les 78 symboles rendus par `active_symbols`, route
+   ouverte depuis COST-02).
+2. **Le coût de Gold est inconnu et n'est pas transposable.** L'ADR 0021 établit que les synthétiques
+   Deriv sont cotés sur **un flux à prix unique, sans spread** — c'est ce qui rend le coût Crash/Boom
+   égal à la seule commission (0.745 / 1.063 bps). **Gold n'est pas un synthétique.** Rien ne garantit
+   ni l'absence de spread, ni le même barème. Réutiliser 0.745 bps sur Gold produirait un chiffre exact
+   et faux, et tout verdict de tradabilité en aval en hériterait. **Action : rejouer
+   `scripts/measure_deriv_live_round_trip.py` sur Gold** (compte démo `DOT93925868`, garde-fous inchangés),
+   puis transcrire le résultat en ADR — le CSV est gitignoré, une mesure non transcrite n'existe pas
+   hors de la machine (leçon COST-02).
+
+**Ordre imposé, hérité du pipeline :** ingestion M1 → coût A/R mesuré → **gate de tradabilité**
+(`domain/tradability`, avant tout entraînement) → recherche de features (FE-01) → seulement ensuite un
+modèle. Le gate passe avant l'entraînement précisément parce qu'un budget de coût sous le coût réel
+réfute l'horizon sans dépenser de calcul (SIG-02). Sauter le gate est ce qui a produit les rejets
+ADR 0019 et 0024.
+
+**Critère de sortie** : un verdict de tradabilité sur Gold appuyé sur un coût A/R **mesuré sur Gold**
+et un historique M1 Deriv de profondeur comparable à Crash/Boom. **Un rejet propre est un succès** —
+si Gold est non tradable aux coûts réels, on l'écarte avec preuve reproductible et l'infrastructure est
+validée par la mesure elle-même.
+
+**Ce que GOLD-01 ne promet pas** : ni que Gold soit tradable, ni qu'un edge existe. Il promet que
+l'infrastructure aura été exercée sur un actif hors de la famille des synthétiques avant qu'on lui
+ajoute une couche ML.
 
 
 ## Phase 3 : Production & Temps Réel

@@ -111,9 +111,9 @@ Objectif : que le kill switch et le tableau de bord parlent de la même somme d'
 | Indicateurs / ATR | ✅ **FAIT** — 4 impl. divergentes, mesurées contre la référence Wilder 1978 : `utils/math.py:114` (exacte), `infrastructure/features/technical_extractor.py:141` (`ewm` sans amorce, 13 barres de warmup fausses sans NaN), `application/reflection/extractor.py:90` (moyenne simple du TR, +6,6 %), `engine/ai_decision_engine.py:50` (`mean(high - low)`, aucun True Range, −9,5 %) | `utils/math.compute_atr` fait autorité, les 3 autres l'appellent |
 | PnL réalisé | ✅ **FAIT** — 4 sites (pas 3), 3 conventions de signe : `engine/portfolio.py:92,106` (exact, dupliqué en interne), `engine/backtester.py:180-188` (exact), `application/monitoring/engine.py:126-129` (**signe inversé sur tout SHORT**) | `engine.portfolio.compute_realized_pnl` fait autorité, les 3 autres l'appellent |
 | Equity | ✅ **FAIT** — 3 sites (pas 2), dont un faux : `engine/portfolio.py:206` (exact), `engine/backtester.py:110` (exact, décomposition sur une base de cash distincte), `application/monitoring/engine.py:101` (**equity = cash, drawdown fantôme égal au notional**) | `engine.portfolio.compute_equity` fait autorité, `portfolio.py` et `monitoring` l'appellent, `backtester` mesuré par équivalence |
-| Annualisation | `engine/portfolio.py:227`, `engine/performance.py:70,74` | `engine/performance.py` fait autorité |
-| Verdict → ordre | `application/council/orchestrator.py:72-91`, `application/validation/council_adapter.py:82-95` | un seul convertisseur |
-| `DatasetBuilder` | `providers/qlib/dataset_builder.py:26`, `dataset/builder.py:8` | un seul |
+| Annualisation | ⏳ **EN COURS** — `engine/portfolio.py:295-312`, `engine/performance.py:70,74` | `engine/performance.py` fait autorité |
+| Verdict → ordre | ⏸️ **GELÉ** (voir séquencement ci-dessous) — `application/council/orchestrator.py:72-91`, `application/validation/council_adapter.py:82-95` | un seul convertisseur |
+| `DatasetBuilder` | ⏸️ **GELÉ** — `providers/qlib/dataset_builder.py:26`, `dataset/builder.py:8` | un seul |
 
 Plus, dans le même lot, les violations de dépendance :
 
@@ -125,6 +125,32 @@ Plus, dans le même lot, les violations de dépendance :
 
 **Critère de sortie :** un test de non-régression numérique par grandeur (mêmes entrées → même sortie,
 quel que soit l'appelant). `architecture-guardian` repasse sans violation d'axe.
+
+### Séquencement interne du Lot 3 — décidé le 2026-08-05
+
+Le Lot 3 n'est **pas** exécuté en bloc. Trois grandeurs sont faites (ATR, PnL réalisé, Equity), la
+quatrième démarre, les deux dernières sont gelées. La coupure n'est pas arbitraire : elle suit le
+**périmètre de code touché**, pas l'ordre du tableau.
+
+| Grandeur | Zone touchée | Décision |
+|---|---|---|
+| Annualisation | métrique pure (`engine/performance.py`, `engine/portfolio.py`) — zéro Council, zéro ML | **fait maintenant** |
+| Verdict → ordre | `application/council/`, `application/validation/council_adapter.py` | **gelé** jusqu'à l'audit du Council |
+| `DatasetBuilder` | `providers/qlib/`, chemin ML | **gelé** jusqu'à l'audit du Council |
+| `domain/council.py:5` → `engine.portfolio.Portfolio` | seule brèche de pureté du domaine, **mais dans le module Council** | **gelé** avec le reste du Council |
+
+Rationale : les deux grandeurs gelées et la violation de pureté vivent toutes dans le Council ou dans
+le chemin ML qu'il alimente. Deux Councils coexistent encore (Lot 6, point 1 —
+`LEGACY_COUNCIL_MIGRATION.md` ni exécutée ni annulée). **Dédupliquer un convertisseur verdict → ordre
+avant de savoir lequel des deux Councils survit, c'est unifier du code dont une moitié part.** Le
+travail serait à refaire, pas à conserver.
+
+L'annualisation n'a pas cette dépendance : c'est une zone métrique fermée. La faire seule termine un
+morceau réel et mesurable du Lot 3 sans ouvrir le Council.
+
+**Ce que la coupure ne prétend pas :** le Lot 3 n'est **pas** terminé quand l'annualisation l'est.
+Le rappel du §ORDRE reste entier — **Lot 3 complet est prérequis obligatoire avant AI-07b (argent
+réel)**, y compris ses trois éléments gelés. Le gel décale, il ne lève pas.
 
 ### Corrections apportées à ce plan lui-même (grandeur ATR)
 

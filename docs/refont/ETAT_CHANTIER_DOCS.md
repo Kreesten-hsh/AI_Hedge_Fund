@@ -7,9 +7,11 @@
 ## 0. Contraintes permanentes — à lire avant toute action
 
 - **Branche de travail : `claude-code-takeover`.** Jamais `main`.
-- **Les Lots 0 à 6 du `PLAN_DE_CORRECTION.md` ne sont PAS approuvés.** Aucun fichier de `src/` ne doit
-  être modifié tant que l'utilisateur n'a pas donné un feu vert explicite, lot par lot ou en bloc.
-  Seul `docs/` est autorisé à l'écriture pour le présent chantier.
+- **Feu vert accordé, mais borné (2026-08-05).** L'interdiction générale de toucher `src/` est levée
+  pour le **périmètre courant seulement** : l'annualisation du Lot 3, puis GOLD-01 (voir §2bis).
+  Les Lots 5 et 6, et les trois éléments gelés du Lot 3 (`Verdict → ordre`, `DatasetBuilder`,
+  `domain/council.py:5`) **restent non approuvés** — ils attendent l'audit du Council. Un feu vert sur
+  une trajectoire n'est pas un feu vert sur le plan entier.
 - **Secrets : jamais de valeur recopiée.** Référencer par nom de clé + `fichier:ligne` + sha de commit.
   Ne pas lire le contenu de `.env` sans besoin précis et explicite.
 - **TradingAgents / AutoHedge / FinceptTerminal / Vibe-Trading = `[INSPIRATION]`,** décision
@@ -89,6 +91,44 @@ des choses justes sur ce qu'on veut construire ; ils mentent sur ce qui existe.
     construction quel que soit le modèle. Seuils **non** ajustés après lecture du gate.
   - Gates : pytest **446** (+9, 0 régression), mypy **536** (inchangé), ruff **305** (inchangé),
     couverture `ml_strategy.py` **100 %**.
+
+- **Lot 3 (Souveraineté numérique)** : ⏳ **EN COURS, partiel.** Trois grandeurs déduplicées et
+  scellées par tests de non-régression : **ATR** (4 implémentations, mesurées contre Wilder 1978),
+  **PnL réalisé** (4 sites, signe inversé sur tout SHORT corrigé), **Equity** (3 sites, drawdown
+  fantôme égal au notional, défaut **actif en production**). Détail et corrections apportées au plan
+  lui-même : `PLAN_DE_CORRECTION.md`, Lot 3.
+  - **Annualisation** : prochaine grandeur, en cours.
+  - **Gelés jusqu'à l'audit du Council** : `Verdict → ordre`, `DatasetBuilder`, et la violation de
+    pureté du domaine `domain/council.py:5`. Motif : les trois vivent dans le Council ou le chemin ML
+    qu'il alimente, et **deux Councils coexistent encore** (Lot 6, point 1). Unifier avant de savoir
+    lequel survit revient à unifier du code dont une moitié part.
+
+## 2bis. Trajectoire arrêtée le 2026-08-05
+
+```
+Annualisation (Lot 3) ──► GOLD-01 ──► [PAUSE, ÉVALUATION] ──► audit Council/ML  ou  pivot
+```
+
+Décision de l'utilisateur, consignée pour qu'une session repartant à froid ne la re-débatte pas.
+Autorité : `docs/BACKLOG.md` § « TRAJECTOIRE COURANTE » (trajectoire) et mission **GOLD-01**
+(prérequis mesurés). `docs/PRODUCT_ROADMAP.md` porte le sprint correspondant.
+
+**Ce qui a été vérifié au `grep` avant d'écrire ces documents — deux points qui contredisaient
+l'hypothèse de départ « Gold est outillé, il suffit de mesurer » :**
+
+1. `data/market_data/xauusd.parquet` = **122 barres D1**, 2026-02-05 → 2026-07-31, source **OpenBB**
+   (`scripts/fetch_training_data.py:81-102`). Pas Deriv, pas M1. Crash/Boom en portent 75000 en M1
+   paginé Deriv. Mesurer Gold sur ce fichier ne testerait ni la source de production, ni la
+   granularité cible, ni la puissance statistique exigée par DATA-01.
+2. Le coût Gold **n'est pas transposable** depuis Crash/Boom. L'ADR 0021 fonde les 0.745 / 1.063 bps
+   sur le fait que les synthétiques Deriv sont cotés sur un flux à **prix unique, sans spread**. Gold
+   n'est pas un synthétique. Réutiliser ces chiffres donnerait un résultat exact et faux, dont tout
+   verdict de tradabilité en aval hériterait.
+
+GOLD-01 reste la bonne prochaine étape et n'exige **aucune refonte** — `fetch_candles_paginated`,
+`measure_deriv_live_round_trip.py`, `domain/tradability` et `run_feature_research.py` existent, sont
+testés, et prennent l'instrument en paramètre. Les deux points ci-dessus sont des prérequis de
+campagne, pas des obstacles d'architecture.
 
 | # | Fichier | Traitement appliqué |
 |---|---|---|
@@ -195,13 +235,19 @@ Pour chaque fichier, dans cet ordre :
 - **Exécuter une correction de code (si et seulement si l'utilisateur a donné le feu vert explicite) :**
   `PLAN_DE_CORRECTION.md` et `AUDIT_COMPLET_2026-07-31.md` se suffisent à eux-mêmes. Chaque lot y porte
   son périmètre, ses fichiers, ses preuves et son critère de sortie. Aucun contexte de conversation
-  antérieure n'est requis. Ordre imposé : **Lot 0 d'abord** — il débloque la collecte des tests et de
-  `mypy`, sans quoi aucun autre lot n'est vérifiable.
+  antérieure n'est requis. Lots 0 à 2 et Lot 4 **terminés** (§2) : les gates collectent, donc tout lot
+  est désormais vérifiable. **Point d'entrée à froid : §2bis** — il donne la trajectoire approuvée et son
+  périmètre. Ne pas repartir du tableau du Lot 3 sans l'avoir lu : trois de ses grandeurs sont faites et
+  trois sont gelées.
 
 ## Ce que ce document ne promet pas
 
 - **Pas un état du code.** Il décrit l'avancement d'un chantier documentaire. L'état du code est dans
   l'audit, et l'audit a une date : le revérifier au `grep` avant d'en tirer une action.
-- **Pas une autorisation.** Rien ici ne vaut approbation des Lots 0 à 6.
+- **Pas une autorisation générale.** Le feu vert du 2026-08-05 (§0, §2bis) couvre l'annualisation du
+  Lot 3 puis GOLD-01, rien d'autre. Les Lots 5 et 6 et les trois éléments gelés du Lot 3 restent non
+  approuvés.
+- **Pas une promesse sur Gold.** GOLD-01 est un point de décision, pas une étape à franchir : un rejet
+  propre de Gold est un résultat valide qui déclenche un pivot, pas un échec à contourner.
 - **Pas une liste close.** Le Bloc B du §3 est une liste de fichiers **à confronter** à l'audit, pas une
   liste de fichiers dont on sait déjà qu'ils sont faux.

@@ -3,10 +3,14 @@ from datetime import datetime
 from decimal import Decimal
 from typing import TypeVar
 import pandas as pd
-import numpy as np
 
 from aegis_trade.domain import Symbol
 from aegis_trade.engine.events import FillEvent, MarketEvent, OrderAction
+from aegis_trade.engine.performance import (
+    annualized_sharpe,
+    annualized_sortino,
+    TRADING_DAYS_PER_YEAR,
+)
 
 Number = TypeVar("Number", Decimal, float)
 
@@ -288,29 +292,28 @@ class Portfolio:
             if len(daily_equity) > 1:
                 daily_returns = daily_equity.pct_change().dropna()
                 if len(daily_returns) > 0:
-                    mean_return = daily_returns.mean()
-                    std_return = daily_returns.std()
-                    
-                    # Sharpe Ratio (Risk-free rate = 0)
-                    # Use sqrt of actual days in period to avoid absurd 252 extrapolation on short windows
                     days = len(daily_equity)
-                    annualization_factor = np.sqrt(days) if days < 30 else np.sqrt(252)
-                    
-                    sharpe = (mean_return / std_return * annualization_factor) if std_return > 0 else 0.0
-                    
-                    # Sortino Ratio
-                    downside_returns = daily_returns[daily_returns < 0]
-                    downside_std = downside_returns.std() if len(downside_returns) > 1 else 0.0
-                    sortino = (mean_return / downside_std * annualization_factor) if downside_std > 0 else (float('inf') if mean_return > 0 else 0.0)
-                    
-                    # Calmar Ratio
+
+                    # `engine/performance.py` fait autorité sur l'annualisation (Lot 3).
+                    # Les rendements sont ré-échantillonnés en journalier ci-dessus, donc la
+                    # périodicité passée est bien TRADING_DAYS_PER_YEAR.
+                    sharpe = annualized_sharpe(daily_returns, 0.0, TRADING_DAYS_PER_YEAR)
+                    sortino = annualized_sortino(daily_returns, 0.0, TRADING_DAYS_PER_YEAR)
+
+                    # Calmar : rendement annualisé / max drawdown.
+                    # L'exposant `252/days` est conservé — il annualise un rendement CUMULÉ, ce qui
+                    # est une grandeur distincte du facteur sqrt appliqué à un écart-type. Le garde
+                    # `days < 30` de l'ancien code n'est plus une exception silencieuse : sous un
+                    # mois, extrapoler un cumul à l'année amplifie le bruit d'un facteur 8+
+                    # (252/30), donc le rendement de PÉRIODE est renvoyé tel quel et le ratio n'est
+                    # pas annualisé. Documenté au lieu d'être un commentaire de fin de ligne.
                     if days > 0:
-                        # Avoid exponentiating 7 days to 36 (252/7)
+                        growth = float(daily_equity.iloc[-1] / daily_equity.iloc[0])
                         if days < 30:
-                            period_return = (daily_equity.iloc[-1] / daily_equity.iloc[0]) - 1
+                            period_return = growth - 1.0
                         else:
-                            period_return = (daily_equity.iloc[-1] / daily_equity.iloc[0]) ** (252 / days) - 1
-                            
+                            period_return = growth ** (TRADING_DAYS_PER_YEAR / days) - 1.0
+
                         calmar = (period_return / max_dd) if max_dd > 0 else (float('inf') if period_return > 0 else 0.0)
         else:
             # Not enough trades to be statistically significant

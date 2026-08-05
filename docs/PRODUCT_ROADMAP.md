@@ -28,6 +28,33 @@ Remplacer le broker simulé par une connexion à un environnement de Paper Tradi
 ### Critères de réussite
 - Les ordres générés en local sont exécutés et réconciliés sur un compte de démonstration MT5/vn.py.
 
+## Sprint courant : Souveraineté numérique & validation multi-actifs [EN COURS — 2026-08-05]
+
+### Objectif
+Terminer la déduplication des grandeurs numériques exécutable hors Council (Lot 3 —
+`docs/refont/PLAN_DE_CORRECTION.md`), puis exercer l'infrastructure sur un **troisième actif réel**
+(GOLD-01) avant d'y greffer une couche ML ou d'auditer le Council.
+
+### Trajectoire
+```
+Annualisation (Lot 3) ──► GOLD-01 ──► [PAUSE, ÉVALUATION] ──► audit Council/ML  ou  pivot
+```
+Détail et prérequis mesurés : `docs/BACKLOG.md`, § « TRAJECTOIRE COURANTE » et mission GOLD-01.
+
+### Contraintes
+- Aucun modèle ML n'est branché avant que GOLD-01 ait rendu son verdict. Le pipeline
+  (Dataset → Backtester → Baseline → Recherche de features → Validations → Modèle) n'admet pas de saut :
+  les rejets ADR 0019 et ADR 0024 viennent tous deux d'une étape sautée.
+- Le coût de transaction de Gold doit être **mesuré sur Gold**. Les 0.745 / 1.063 bps de l'ADR 0021
+  valent pour des synthétiques Deriv sans spread ; Gold n'en est pas un.
+- Lot 3 complet (y compris ses éléments gelés dans le Council) reste prérequis obligatoire avant AI-07b
+  (engagement d'argent réel).
+
+### Critères de réussite
+- Annualisation : `engine/performance.py` seule autorité, test de non-régression numérique par appelant.
+- GOLD-01 : verdict de tradabilité appuyé sur un historique M1 Deriv et un coût A/R mesurés sur Gold.
+  **Un rejet propre et reproductible compte comme réussite.**
+
 ## Sprint 4 : Le Centre de Contrôle (Mission LIVE-01 - Dashboard) [EN COURS]
 ### Objectif
 Construire l'interface visuelle locale (Dashboard) pour superviser le système sans utiliser le terminal.

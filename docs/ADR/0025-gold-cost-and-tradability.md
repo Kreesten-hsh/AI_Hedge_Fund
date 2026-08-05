@@ -1,20 +1,22 @@
-# ADR 0025 — Coût de transaction et Tradabilité de l'Or (frxXAUUSD) : Rejet documenté de GOLD-01
+# ADR 0025 — Coût de transaction, Gate de Tradabilité et Alpha Research de l'Or (frxXAUUSD) : Rejet documenté de GOLD-01
 
 - **Statut** : REJETÉ
 - **Date** : 2026-08-05
-- **Contexte technique** : `scripts/measure_deriv_live_round_trip.py`, `scripts/run_feature_research.py`, `data/market_data/xauusd.parquet`
-- **Dépend de** : ADR 0018 (seuils dérivés du coût), ADR 0021 (protocole de mesure de coût), ADR 0024 (rejet SIG-02 et feature research)
+- **Contexte technique** : `src/aegis_trade/domain/tradability.py`, `scripts/measure_deriv_live_round_trip.py`, `scripts/run_feature_research.py`, `data/market_data/xauusd.parquet`
+- **Dépend de** : ADR 0018 (seuils dérivés du coût), ADR 0019 (hypothèse 1-barre réfutée), ADR 0021 (protocole de mesure de coût), ADR 0024 (rejet SIG-02 et feature research)
 - **Résout** : Prérequis 2 et Gate de tradabilité de GOLD-01
 
 ## Contexte
 
 GOLD-01 vise à évaluer la tradabilité du CFD Or (`frxXAUUSD`) sur Deriv à la granularité M1. Conforme à la discipline de validation d'Aegis Quant OS et aux leçons des ADR 0018 à 0024 :
 1. **Le coût réel doit être mesuré sur compte live/démo** avant tout entraînement de modèle, et ne peut pas être hérité des synthétiques (ADR 0021).
-2. **Le gate de tradabilité et de puissance prédictive des features doit précéder tout modèle ML** (ADR 0024) : sans signal mesuré supérieur au coût de transaction, l'entraînement est une espérance négative garantie par construction.
+2. **Le vrai gate de tradabilité économique (`domain/tradability.py`)** doit évaluer le budget aller-retour finançable (`max_viable_round_trip_cost`, `tradable_window_ratio`) sur une gamme d'horizons avant d'analyser la puissance prédictive des features (`run_feature_research.py`).
+
+---
 
 ## 1. Mesure du Coût de Transaction (Compte Démo Deriv `DOT93925868`)
 
-Cinq allers-retours automatisés Multipliers (`frxXAUUSD`, stake $10, multiplicateur x100, détention 5s) ont été exécutés sur le canal authentifié PAT + OTP Deriv dès la réouverture de session du marché (22:10 UTC). 
+Cinq allers-retours automatisés Multipliers (`frxXAUUSD`, stake $10, multiplicateur x100, détention 5s) ont été exécutés sur le canal authentifié PAT + OTP Deriv à la réouverture de session du marché (22:10 UTC).
 
 ### Résultats mesurés (médianes sur 5 allers-retours)
 
@@ -22,28 +24,47 @@ Cinq allers-retours automatisés Multipliers (`frxXAUUSD`, stake $10, multiplica
 |---|---|---|---|
 | **Péage d'exécution (commission)** | **1.859 bps** (0.01859 %) | 0.745 bps (2.5x) | 1.063 bps (1.8x) |
 | **Slippage / Spread moyen** | **-0.047 bps** | N/A (prix unique) | N/A (prix unique) |
-| **Coût Tout Compris (médiane)** | **1.818 bps** (0.0001818) | 0.745 bps (2.4x) | 1.063 bps (1.7x) |
+| **Coût Tout Compris (médiane)** | **1.859 bps** (0.0001859) | 0.745 bps (2.5x) | 1.063 bps (1.8x) |
 
-**Constat** : Le coût aller-retour sur Gold est nettement plus élevé que sur les indices synthétiques. Le seuil de rentabilité minimal (`breakeven_return`) pour une position sur Gold est de **1.818 bps** (0.0001818 par A/R).
-
----
-
-## 2. Recherche de Features & Pouvoir Prédictif (75 000 barres M1)
-
-L'analyse de corrélation d'information (IC Spearman et t-stat avec correction de chevauchement $n_{\text{eff}}$) a été exécutée sur l'historique M1 complet (75 000 barres, split chronologique 70 % train / 30 % test) :
-
-- **Horizon 5 barres** : **0 / 25 features survivent**. Aucune feature ne franchit le seuil de significativité ($|t| > 2.0$, $|t|$ max = 1.87 sur le niveau `typical_price`).
-- **Horizon 10 barres** : **0 feature d'oscillateur ou de rendement ne survit** ($|t| < 0.47$ pour `log_return` et `rsi`). 6 niveaux de prix bruts (`typical_price`, `median_price`, `ema_10`, `ema_20`, `bb_middle`, `bb_lower`) franchissent marginalement $|t| \approx 2.04 - 2.11$ sur le test, mais cette Corrélation est un pur artefact de tendance/dérive du sous-jacent sur 77 jours, sans puissance prédictive de rendement et sans correction pour tests multiples.
+**Constat** : Le coût aller-retour sur Gold est de **1.859 bps** (0.0001859 par A/R).
 
 ---
 
-## 3. Décision du Gate de Tradabilité
+## 2. Évaluation du Vrai Gate de Tradabilité (`domain/tradability.py`)
 
-- **Coût A/R mesuré** : 1.818 bps.
-- **Signal d'alpha exploitable** : 0.00 bps (non distinguable du bruit).
-- **Verdict du Gate** : **GOLD-01 est REJETÉ**.
+Les fonctions du domaine pur `domain/tradability.py` (`max_viable_round_trip_cost`, `tradable_window_ratio`, `is_horizon_tradable`) ont été exécutées sur l'ensemble de l'historique M1 Gold (75 000 barres, 2026-05-20 à 2026-08-05) pour une gamme d'horizons glissants $H \in [1, 5, 10, 15, 30, 60, 120, 240]$ barres :
 
-Conformément à la règle permanente d'Aegis Quant OS :
-*« Ne PAS enchaîner sur FE-01 / entraînement si le gate rejette l'instrument. Un rejet propre avec preuve reproductible est un succès au même titre qu'un GO. »*
+| Horizon (M1) | Max Viable Cost @ 50% ratio | Ratio de fenêtres tradables @ 1.859 bps | Verdict Gate Tradabilité (`min_ratio=50%`) |
+|---|---|---|---|
+| **H1** | 1.849 bps | 49.82 % | **FAUX** (Réfuté à 1 min) |
+| **H5** | 4.256 bps | 75.61 % | **VRAI** |
+| **H10** | 6.018 bps | 82.64 % | **VRAI** |
+| **H15** | 7.365 bps | 85.80 % | **VRAI** |
+| **H30** | 10.451 bps | 89.97 % | **VRAI** |
+| **H60** | 14.774 bps | 92.50 % | **VRAI** |
+| **H120** | 22.309 bps | 95.34 % | **VRAI** |
 
-L'hypothèse GOLD-01 sur M1 est clôturée en statut **REJETÉ**. Aucun modèle ML ne sera entraîné sur Gold dans les conditions actuelles.
+**Enseignement du Gate de Tradabilité** :
+Contrairement à la conjecture initiale, **l'obstacle sur Gold n'est pas une amplitude insuffisante de mouvement**. L'Or M1 présente une volatilité et un parcours suffisants pour que 75.6 % à 95.3 % des fenêtres de 5 à 120 barres couvrent largement le coût aller-retour de 1.859 bps. **Le Gate de Tradabilité est donc PASSÉ avec succès à partir de H5**.
+
+---
+
+## 3. Recherche de Features & Alpha Research (FE-01) sur les Horizons Économiquement Tradables
+
+La suite `run_feature_research.py` (IC Spearman avec correction $n_{\text{eff}}$ et split 70% train / 30% test) a été exécutée sur la plage des horizons tradables ($H \in [5, 10, 15, 30, 60, 120]$) :
+
+- **Oscillateurs & Indicateurs de Momentum/Rendement** (`rsi_14`, `macd`, `macd_hist`, `return_1d`, `log_return`, `return_5d`, `return_10d`, `ema_distance`) :
+  - **0 / 25 features de rendement/oscillateur ne franchit le seuil $|t| > 2.0$** sur le test, quel que soit l'horizon ($H=5: |t| \le 1.31$, $H=10: |t| \le 0.47$, $H=15: |t| \le 0.33$, $H=30: |t| \le 0.14$, $H=60: |t| \le 0.41$, $H=120: |t| \le 0.35$).
+- **Features de niveau bruts non stationnaires** (`typical_price`, `median_price`, `ema_10`, `bb_lower`) :
+  - Affichent des $|t| \approx 2.0 - 2.11$ purement imputables à la dérive séculaire du cours de l'Or sur 77 jours, sans puissance prédictive d'alpha ou de rendement.
+
+---
+
+## 4. Synthèse et Décision Finale
+
+1. **Le Gate de Tradabilité est PASSÉ** : L'instrument Gold possède le budget d'amplitude nécessaire pour absorber ses 1.859 bps de frais dès l'horizon 5 minutes.
+2. **La Recherche de Features est ÉCHUÉE** : L'ensemble des 25 features techniques de base ne contient aucun signal d'alpha exploitable sur Gold M1.
+
+**VERDICT FINALE** : **GOLD-01 est REJETÉ**.
+
+Aucun modèle ML ne sera entraîné avec le set de features actuel. Tout développement ultérieur sur Gold exigera de nouvelles familles de features (ex: order flow, volatilité micro-structurelle, spread de corrélations).

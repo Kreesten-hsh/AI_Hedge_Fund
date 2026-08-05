@@ -41,6 +41,44 @@ def compute_realized_pnl(
     return delta * quantity_closed
 
 
+def compute_equity(
+    cash: Number, positions: tuple[tuple[Number, Number], ...]
+) -> Number:
+    """Autorité unique de l'equity — Lot 3, souveraineté des grandeurs.
+
+    Trois sites calculaient cette grandeur. `application/monitoring/engine.py`
+    initialisait `total_unrealized_pnl` à `Decimal(0)` et ne le réécrivait
+    nulle part : le terme était structurellement nul, donc `equity == cash`.
+    Or ce `cash` vient du broker (`bal.total`), dont le notional a été déduit.
+    Conséquence : 100k de capital, achat d'1 unité à 50k, equity affichée 50k
+    au lieu de 100k — un drawdown fantôme égal au notional, à l'instant même
+    de l'ouverture.
+
+    Convention mark-to-market : `cash + Σ(volume_signé × prix_mark)`. Le
+    `volume` est signé (positif pour un LONG, négatif pour un SHORT) : le
+    notional du long s'ajoute, celui du short se soustrait — l'algèbre correcte
+    découle de la convention de cash plutôt que d'un test explicite de side.
+
+    Paramètre `positions` : tuple de tuples `(volume_signé, prix_mark)`. Forme
+    contrainte pour que l'appelant ne puisse pas passer une liste mutable sans
+    le vouloir — même raisonnement que pour `compute_realized_pnl`.
+
+    Le type est contraint à `Decimal | float` : le `Backtester` est en float,
+    le `Portfolio` en Decimal, le `MonitoringEngine` en Decimal. Le `Backtester`
+    reste mesuré par équivalence, pas unifié — sa comptabilité est scellée par
+    des tests existants et convertir ses float déplacerait des arrondis validés.
+    """
+    if isinstance(cash, Decimal):
+        decimal_value = Decimal(0)
+        for signed_volume, mark_price in positions:
+            decimal_value += Decimal(str(signed_volume)) * Decimal(str(mark_price))
+        return cash + decimal_value
+    float_value = 0.0
+    for signed_volume, mark_price in positions:
+        float_value += float(signed_volume) * float(mark_price)
+    return cash + float_value
+
+
 @dataclass
 class EnginePosition:
     """Internal position tracking for the Trading Engine."""
@@ -185,25 +223,16 @@ class Portfolio:
                 pos.unrealized_pnl = pnl
                 unrealized += pnl
 
-        # Note: In a real margin account, cash doesn't strictly define equity. 
-        # Equity = Cash + Position Value. 
-        # Here `self.cash` represents the cash balance (after subtracting position cost).
-        # Position Value = abs(volume) * current_price.
-        # So Equity = Cash + sum(volume * current_price) if Long, Cash - sum(volume * current_price) if Short.
-        # Actually, simpler: Equity = Initial Capital + Realized PnL + Unrealized PnL - Total Commissions
-        # But since Cash already factors in Realized PnL, Commissions and initial cost:
-        # If we bought 1 BTC at $50k with $100k capital. Cash = $50k. BTC value = $60k. Equity = $110k.
-        # Equity = Cash + Position Value = 50k + 60k = 110k.
-        position_value = Decimal("0.0")
-        for pos in self._positions.values():
-            if pos.symbol in self._latest_prices:
-                if pos.volume > 0:
-                    position_value += pos.volume * self._latest_prices[pos.symbol]
-                else:
-                    # For short, we received cash when selling, so we owe the position value.
-                    position_value += pos.volume * self._latest_prices[pos.symbol] 
-
-        self.equity = self.cash + position_value
+        # `self.cash` est le solde après déduction du coût de la position. Le
+        # volume étant signé, le notional du long s'ajoute et celui du short se
+        # soustrait : c'est la convention portée par `compute_equity`, qui fait
+        # autorité pour les trois sites de cette grandeur (Lot 3).
+        marked_positions = tuple(
+            (pos.volume, self._latest_prices[pos.symbol])
+            for pos in self._positions.values()
+            if pos.symbol in self._latest_prices
+        )
+        self.equity = compute_equity(cash=self.cash, positions=marked_positions)
         
         # Only record if we actually have a timestamp 
         if timestamp:

@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from aegis_trade.engine.events import (
     EngineEvent, EngineEventType, OrderLifecycleEvent, PositionEvent, AccountEvent, TradeEvent
 )
-from aegis_trade.engine.portfolio import compute_realized_pnl
+from aegis_trade.engine.portfolio import compute_equity, compute_realized_pnl
 from aegis_trade.application.monitoring.models import (
     PortfolioSnapshot, PositionSnapshot, RiskSnapshot, SystemSnapshot,
     PerformanceSnapshot, PaperTradingSnapshot, BrokerSnapshot, StrategySnapshot
@@ -98,7 +98,13 @@ class MonitoringEngine:
             ev: AccountEvent = event
             if ev.action == "balance_updated":
                 self.portfolio.cash = ev.amount
-                self.portfolio.equity = self.portfolio.cash + self.portfolio.total_unrealized_pnl
+                # Recalcul equity via l'autorité, pas via total_unrealized_pnl figé
+                positions_tuple = tuple(
+                    (pos.quantity, pos.current_price) for pos in self.positions.values()
+                )
+                self.portfolio.equity = compute_equity(
+                    cash=self.portfolio.cash, positions=positions_tuple
+                )
                 self.portfolio.timestamp = now
                 updated_topics.append(("portfolio", self.portfolio))
 

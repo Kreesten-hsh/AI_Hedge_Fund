@@ -110,7 +110,7 @@ Objectif : que le kill switch et le tableau de bord parlent de la même somme d'
 |---|---|---|
 | Indicateurs / ATR | ✅ **FAIT** — 4 impl. divergentes, mesurées contre la référence Wilder 1978 : `utils/math.py:114` (exacte), `infrastructure/features/technical_extractor.py:141` (`ewm` sans amorce, 13 barres de warmup fausses sans NaN), `application/reflection/extractor.py:90` (moyenne simple du TR, +6,6 %), `engine/ai_decision_engine.py:50` (`mean(high - low)`, aucun True Range, −9,5 %) | `utils/math.compute_atr` fait autorité, les 3 autres l'appellent |
 | PnL réalisé | ✅ **FAIT** — 4 sites (pas 3), 3 conventions de signe : `engine/portfolio.py:92,106` (exact, dupliqué en interne), `engine/backtester.py:180-188` (exact), `application/monitoring/engine.py:126-129` (**signe inversé sur tout SHORT**) | `engine.portfolio.compute_realized_pnl` fait autorité, les 3 autres l'appellent |
-| Equity | `engine/portfolio.py:165`, `application/monitoring/engine.py:100` | idem |
+| Equity | ✅ **FAIT** — 3 sites (pas 2), dont un faux : `engine/portfolio.py:206` (exact), `engine/backtester.py:110` (exact, décomposition sur une base de cash distincte), `application/monitoring/engine.py:101` (**equity = cash, drawdown fantôme égal au notional**) | `engine.portfolio.compute_equity` fait autorité, `portfolio.py` et `monitoring` l'appellent, `backtester` mesuré par équivalence |
 | Annualisation | `engine/portfolio.py:227`, `engine/performance.py:70,74` | `engine/performance.py` fait autorité |
 | Verdict → ordre | `application/council/orchestrator.py:72-91`, `application/validation/council_adapter.py:82-95` | un seul convertisseur |
 | `DatasetBuilder` | `providers/qlib/dataset_builder.py:26`, `dataset/builder.py:8` | un seul |
@@ -191,6 +191,46 @@ dans `src/` (`infrastructure/paper/broker.py:230`) n'émet que `"opened"` et `"u
 par les tests — dont aucun ne couvrait le SHORT. Il se serait activé au premier adaptateur broker
 émettant une fermeture. **Ce trou d'émission est un défaut fonctionnel distinct, non traité ici :
 il sort du mandat « une seule implémentation par grandeur » et appartient au Lot 6.**
+
+### Corrections apportées à ce plan lui-même (grandeur Equity)
+
+Le tableau annonçait deux implémentations. La mesure en a trouvé **trois**, dont une fausse :
+
+- `engine/backtester.py:110` (`capital + unrealized_pnl`) était absent du tableau. Il est exact :
+  son `capital` ne déduit pas le notional, sa décomposition est algébriquement équivalente à
+  celle de l'autorité sur une base de cash différente. **Mesuré par équivalence, pas unifié** —
+  réécrire sa comptabilité float déplacerait des arrondis déjà scellés par tests (même
+  raisonnement que `Decimal | float` sur `compute_realized_pnl`).
+- `application/monitoring/engine.py:101` calculait `cash + total_unrealized_pnl`, où
+  `total_unrealized_pnl` est initialisé à `Decimal(0)` en `:55` et **n'est réécrit nulle part
+  dans `src/`** (3 occurrences : 2 déclarations de modèle, 1 init, 1 lecture). Le terme est
+  structurellement nul, donc `equity == cash`. Or ce `cash` vient de
+  `infrastructure/paper/broker.py:212` (`bal.total`), dont `(volume × prix) + commission` a été
+  déduit à l'achat. **100k de capital, achat d'1 unité à 50k → equity affichée 50k au lieu de
+  100k** : un drawdown fantôme égal au notional, à l'instant de l'ouverture. Sur un SHORT le
+  signe s'inverse et le défaut **embellit** le compte (mesuré : +200 au lieu de 0).
+- L'autorité prend un `volume signé` et une convention de cash explicite (`cash + Σ(volume_signé
+  × prix_mark)`) : le notional du long s'ajoute, celui du short se soustrait par l'algèbre, pas
+  par un test de `side`. C'est la contrainte structurelle, symétrique de la quantité absolue de
+  `compute_realized_pnl`.
+
+**Contrairement au défaut de PnL du même lot, ce chemin n'était pas latent.** `balance_updated`
+est émis à chaque fill par `broker.py:207`. Le défaut était actif en production.
+
+**Portée réelle, sans surestimer.** Le kill switch n'est **pas** touché : il lit le
+`PortfolioEngine` via `orchestrator.py:305`, déjà autorité, dont le commentaire anticipe
+explicitement ce genre de divergence dashboard/risque. `PORTFOLIO_EQUITY` (Prometheus,
+`api/routers/observability.py:10`) est déclaré et jamais assigné. Le défaut portait sur
+l'affichage du dashboard via `get_portfolio_snapshot()`, pas sur la décision de risque.
+
+**Mark-to-market du monitoring — hors périmètre, renvoyé au Lot 6.** `MonitoringEngine` n'a
+aucune alimentation en prix de marché : `PositionSnapshot.current_price` est fixé à
+`ev.average_price` (`:117`) et réactualisé par aucun événement. Après correction, son equity est
+juste à l'ouverture au lieu d'être fausse du notional entier, mais reste figée entre deux fills.
+Un test verrouille cet état (`test_monitoring_equity_is_frozen_between_fills`) pour qu'il reste
+visible : il échouera le jour où ce chemin sera branché — c'est voulu. Même traitement que le
+trou d'émission `"closed"` du broker paper : défaut fonctionnel distinct, hors du mandat
+« une seule implémentation par grandeur ».
 
 ---
 

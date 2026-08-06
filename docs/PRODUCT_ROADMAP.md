@@ -39,9 +39,9 @@ GOLD-01 (M1 Tech: REJETÉ) ──► GOLD-MACRO (DFII10 + OpenBB FRED) ──►
 ```
 
 ### Jalons & Priorités
-1. **GOLD-MACRO** : Ingestion & alignement temporel des séries macro FRED (Taux réels `DFII10`) via `OpenBBDataProvider` (ADR 0026), puis validation de l'alpha prédictif via `domain/tradability` et `run_feature_research.py`.
-2. **AUDIT COUNCIL** : Audit complet du Council à 8 agents (`domain/council.py`) selon la même grille de mesure rigoureuse (ADR, P&L net vs coût réel mesuré de 1.859 bps).
-3. **ÉVALUATION DE FRÉQUENCE** : Si l'absence d'alpha M1 persiste, transition vers des stratégies à horizon plus bas (H4 / D1) privilégiant la conviction sur des mouvements d'amplitude supérieure aux frais de transaction.
+1. **GOLD-MACRO (Clôturé - ADR 0027)** : Ingestion & alignement temporel des séries macro FRED (Taux réels `DFII10`). Évaluation d'alpha réfutée sur M1.
+2. **AUDIT COUNCIL (Clôturé - ADR 0028)** : Audit complet du Council à 8 agents (`domain/council.py`). Réfuté sur M1 (P&L net de -1.70 bps par trade face au coût de 1.859 bps).
+3. **PIVOT FRÉQUENCE H4/D1 (En cours - Priorité 1)** : Évaluation systématique du changement de régime vers des horizons temporels plus bas (H4 et D1) privilégiant la conviction macro sur des mouvements d'amplitude supérieure aux frais de transaction.
 
 ### Contraintes
 - Aucun modèle ML n'est branché avant que GOLD-01 ait rendu son verdict. Le pipeline

@@ -11,8 +11,8 @@ GOLD-01 (M1 Tech: REJETÉ) ──► GOLD-MACRO (DFII10 + OpenBB FRED) ──►
 
 1. **GOLD-01 (Clôturé & Rejeté - ADR 0025)** : Coût A/R mesuré à 1.859 bps. Gate économique `domain/tradability` validé dès H5 (>75.6% tradable), mais 0/25 indicateurs techniques significatifs de H5 à H120. Réfute définitivement l'hypothèse des indicateurs techniques simples sur M1.
 2. **GOLD-MACRO (Clôturé & Rejeté - ADR 0027)** : Ingestion et alignement des Taux Réels 10 ans FRED (`DFII10`) et DXY sur 75k barres M1 Gold. 0/6 features macro significatives de H5 à H240 ($|t| \le 1.93$). Les séries quotidiennes macro ne prédisent pas le bruit M1.
-3. **Audit du Council à 8 agents (En cours — Priorité 1)** : Soumission du Council multi-agents (`domain/council.py`) à la même grille d'évaluation scientifique (ADR, P&L net contre le péage réel de 1.859 bps, significativité statistique).
-4. **Évaluation de Fréquence / Horizon (Priorité 2)** : En cas d'absence d'alpha à haute fréquence M1, réévaluation du régime de fréquence vers des horizons plus bas (H4 / D1) à forte conviction et frais d'allers-retours très amortis.
+3. **Audit du Council à 8 agents (Clôturé & Rejeté - ADR 0028)** : Évaluation séquentielle du Council déterministe (`domain/council.py`) sur 75k barres M1 (Gold, Crash 1000). Le consensus émet >36% de trades à mouvement moyen (+0.15 bps) 11x inférieur aux frais (1.859 bps), produisant un P&L net négatif (-1.70 bps par trade). Réfuté sur M1.
+4. **Pivot Fréquence & Régime d'Horizon H4/D1 (En cours — Priorité 1)** : Évaluation systématique du changement de régime vers des horizons temporels plus bas (H4 et Quotidien D1). Mesure des mouvements moyens et de la rentabilité nette lorsque les allers-retours sont amortis sur des tendances macro à forte conviction.
 
 Ce qui reste **gelé** jusqu'à cette évaluation : audit du Council (deux Councils coexistent, Lot 6
 point 1), déduplication `Verdict → ordre`, déduplication `DatasetBuilder`, pureté du domaine

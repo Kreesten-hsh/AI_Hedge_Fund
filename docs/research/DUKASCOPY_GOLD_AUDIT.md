@@ -4,10 +4,10 @@
 
 ## 1. Sondage de Profondeur Historique Dukascopy
 
-- **Profondeur D1** : **4229 barres** du 2015-01-01 au 2026-08-05 (**16.78 années de trading**)
-- **Profondeur H4** : **25252 barres** du 2015-01-01 au 2026-08-05
-- **Conformité minimale** : Exigence D1 (~3 ans) $	o$ **11.6 ans obtenus (Dépassement larg. conforme)** ✅
-- **Conformité minimale** : Exigence H4 (~2 ans) $	o$ **11.6 ans obtenus (Dépassement larg. conforme)** ✅
+- **Profondeur D1** : **4 229 barres** du 2015-01-01 au 2026-08-05 (**11.6 années calendaires**)
+- **Profondeur H4** : **25 252 barres** du 2015-01-01 au 2026-08-05 (**11.6 années calendaires**)
+- **Conformité minimale** : Exigence D1 (~3 ans) $\to$ **11.6 ans obtenus (Dépassement largement conforme)** ✅
+- **Conformité minimale** : Exigence H4 (~2 ans) $\to$ **11.6 ans obtenus (Dépassement largement conforme)** ✅
 
 ## 2. Conformité Licences & Conditions d'Utilisation
 

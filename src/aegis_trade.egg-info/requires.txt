@@ -17,8 +17,10 @@ stable-baselines3>=2.0.0
 torch>=2.0.0
 finrl>=0.3.6
 einops>=0.8.2
+openbb-fred>=1.0.0
 
 [dev]
 pytest
 pytest-cov
 pytest-mock
+pytest-asyncio>=1.0

@@ -11,6 +11,8 @@ class MomentumAgent:
 
     def vote(self, context: MarketContext) -> AgentVote:
         rsi = context.features.get('rsi')
+        if rsi is None:
+            rsi = context.features.get('rsi_14')
         
         if rsi is None:
             return AgentVote(self.name, "WAIT", 0.0)

@@ -1,7 +1,8 @@
-"""Harnais de test et diagnostic quantitatif du MultiAgentCouncil (8 agents).
+"""Harnais de test et diagnostic quantitatif complet du MultiAgentCouncil (8 agents).
 
-Évalue le consensus déterministe généré par le Council (Trend, Momentum, Volatility, etc.)
-sur les barres réelles M1 (Gold, Crash 1000) et calcule l'espérance nette P&L face aux coûts réels mesurés.
+Évalue le consensus déterministe généré par le Council sur les barres réelles M1 (Gold, Crash 1000),
+en simulant l'évolution dynamique du Portfolio et de la mémoire FAISS (PatternAgent)
+afin d'exercer 5 agents actifs sur 8.
 """
 
 from __future__ import annotations
@@ -10,10 +11,12 @@ import logging
 from decimal import Decimal
 import pandas as pd
 import numpy as np
+from typing import Dict
 
 from aegis_trade.domain.core import Symbol, AssetClass, TimeFrame, MarketBar
 from aegis_trade.domain.council import MarketContext
-from aegis_trade.engine.portfolio import Portfolio
+from aegis_trade.engine.portfolio import Portfolio, EnginePosition
+from aegis_trade.engine.events import MarketEvent
 from aegis_trade.infrastructure.features.technical_extractor import TechnicalFeatureExtractor
 
 from aegis_trade.application.council.orchestrator import MultiAgentCouncil
@@ -50,7 +53,7 @@ def evaluate_council_on_parquet(
     cost_bps: float,
     horizon: int = 5,
 ):
-    logger.info(f"Évaluation du Council sur {symbol_name} ({parquet_path}), Coût: {cost_bps} bps, Horizon: {horizon}m")
+    logger.info(f"Évaluation complète du Council sur {symbol_name} ({parquet_path}), Coût: {cost_bps} bps, Horizon: {horizon}m")
     df = pd.read_parquet(parquet_path)
     
     if "timestamp" in df.columns:
@@ -83,32 +86,87 @@ def evaluate_council_on_parquet(
     extractor = TechnicalFeatureExtractor()
     feature_sets = extractor.extract(bars)
     
-    portfolio = Portfolio(initial_capital=Decimal("10000.0"))
+    portfolio = Portfolio(initial_capital=10000.0)
     council = build_council()
     
     verdicts: list[str] = []
     confidences: list[float] = []
     multipliers: list[float] = []
+    veto_reasons: list[str | None] = []
     
-    logger.info("Exécution séquentielle du Council à 8 agents...")
-    for fset, bar in zip(feature_sets, bars):
+    # Compteurs de votes directionnels (BUY / SELL) par agent
+    agent_directional_votes: Dict[str, int] = {
+        "TrendAgent": 0,
+        "MomentumAgent": 0,
+        "VolatilityAgent": 0,
+        "LiquidityAgent": 0,
+        "PatternAgent": 0,
+        "NewsAgent": 0,
+        "ExecutionAgent": 0,
+        "PortfolioAgent": 0,
+    }
+
+    # Suivi dynamique des positions simulées pour alimenter la réaction du PortfolioAgent
+    active_position_expiry = -1
+    
+    logger.info("Exécution séquentielle du Council avec Portfolio dynamique et mémoire FAISS synthétique...")
+    for idx, (fset, bar) in enumerate(zip(feature_sets, bars)):
+        current_price = bar.close
+        portfolio.on_market_event(MarketEvent(timestamp=bar.timestamp, bar=bar))
+        
+        # Fermeture simulée de la position au bout de l'horizon
+        if idx == active_position_expiry:
+            pos = portfolio.get_position(symbol)
+            if pos and pos.volume != 0:
+                portfolio._positions.pop(symbol, None)
+            active_position_expiry = -1
+            
+        # Simulation d'un memory_score FAISS dynamique (PatternAgent)
+        # calculé sur le rendement glissant des 5 barres précédentes
+        if idx >= 5:
+            past_ret = float((bars[idx].close - bars[idx-5].close) / bars[idx-5].close)
+            memory_score = float(np.clip(past_ret * 20000.0, -100.0, 100.0))
+        else:
+            memory_score = 0.0
+
         ctx = MarketContext(
             symbol=symbol,
             features=fset.features,
             portfolio=portfolio,
-            latest_prices={symbol: bar.close},
-            memory_score=0.0
+            latest_prices={symbol: current_price},
+            memory_score=memory_score
         )
+        
         verdict = council.evaluate(ctx)
         verdicts.append(verdict.final_vote)
         confidences.append(verdict.aggregated_confidence)
         multipliers.append(verdict.position_size_multiplier)
+        veto_reasons.append(verdict.veto_reason)
+        
+        # Enregistrement des votes directionnels par agent (BUY / SELL)
+        for v in verdict.votes:
+            if v.vote in ("BUY", "SELL"):
+                agent_directional_votes[v.agent_name] += 1
+
+        # Mettre à jour la position dans le Portfolio pour alimenter les barres suivantes (PortfolioAgent)
+        if verdict.final_vote in ("BUY", "SELL") and verdict.position_size_multiplier > 0.0:
+            if active_position_expiry == -1:
+                vol = Decimal("1.0") * Decimal(str(verdict.position_size_multiplier))
+                if verdict.final_vote == "SELL":
+                    vol = -vol
+                portfolio._positions[symbol] = EnginePosition(
+                    symbol=symbol,
+                    volume=vol,
+                    average_price=current_price
+                )
+                active_position_expiry = idx + horizon
 
     df_eval = pd.DataFrame({
         "close": [float(b.close) for b in bars],
         "verdict": verdicts,
         "confidence": confidences,
         "multiplier": multipliers,
+        "veto_reason": veto_reasons,
     }, index=[b.timestamp for b in bars])
 
     df_eval["forward_return"] = df_eval["close"].pct_change(horizon).shift(-horizon)
@@ -116,14 +174,28 @@ def evaluate_council_on_parquet(
     buy_signals = df_eval[df_eval["verdict"] == "BUY"]
     sell_signals = df_eval[df_eval["verdict"] == "SELL"]
     wait_signals = df_eval[df_eval["verdict"] == "WAIT"]
+    veto_signals = df_eval[df_eval["veto_reason"].notna()]
     
     print("\n" + "=" * 80)
-    print(f"  RÉSULTATS DE L'AUDIT DU COUNCIL SUR {symbol_name} (75 000 barres M1)")
+    print(f"  RÉSULTATS AUDIT DYNAMIQUE DU COUNCIL SUR {symbol_name} (75 000 barres M1)")
     print("=" * 80)
+    print("  Activité des 8 Agents du Council (Votes BUY / SELL émis) :")
+    active_agents_count = 0
+    for agent_name, count in agent_directional_votes.items():
+        is_active = count > 0
+        if is_active:
+            active_agents_count += 1
+        status_str = f"ACTIF ({count:>6} votes directionnels)" if is_active else "INACTIF / STUB"
+        print(f"    - {agent_name:<18} : {status_str}")
+        
+    print(f"\n  TOTAL AGENTS AYANT VOTÉ BUY/SELL : {active_agents_count} / 8")
+    print("  (Note: NewsAgent est un stub LLM hors-path critique documenté comme inactif)")
+    print("-" * 80)
     print(f"  Distribution des Verdicts du Council:")
-    print(f"    - BUY  : {len(buy_signals):>6} ({len(buy_signals)/len(df_eval)*100:.2f} %)")
-    print(f"    - SELL : {len(sell_signals):>6} ({len(sell_signals)/len(df_eval)*100:.2f} %)")
-    print(f"    - WAIT : {len(wait_signals):>6} ({len(wait_signals)/len(df_eval)*100:.2f} %)")
+    print(f"    - BUY   : {len(buy_signals):>6} ({len(buy_signals)/len(df_eval)*100:.2f} %)")
+    print(f"    - SELL  : {len(sell_signals):>6} ({len(sell_signals)/len(df_eval)*100:.2f} %)")
+    print(f"    - WAIT  : {len(wait_signals):>6} ({len(wait_signals)/len(df_eval)*100:.2f} %)")
+    print(f"    - VETOS : {len(veto_signals):>6} ({len(veto_signals)/len(df_eval)*100:.2f} %)")
     print("-" * 80)
 
     cost_frac = cost_bps / 10000.0

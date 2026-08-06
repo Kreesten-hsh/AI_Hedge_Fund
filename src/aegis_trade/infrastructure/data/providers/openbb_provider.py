@@ -54,14 +54,16 @@ class OpenBBDataProvider(IDataProvider):
         ticker_map = {
             "DXY": "DX-Y.NYB",
             "US10Y": "^TNX",
+            "DFII10": "DFII10",
+            "REAL_RATE_10Y": "DFII10",
             "XAUUSD": "GC=F",
-            "GOLD": "GC=F"
+            "GOLD": "GC=F",
         }
         target_ticker = ticker_map.get(symbol.name, symbol.name)
         
         try:
-            # Equity price historical for commodities/stocks, index for macro indices
-            if symbol.name in ["DXY", "US10Y"]:
+            # Equity price historical for commodities/stocks, index/fred for macro indices
+            if symbol.name in ["DXY", "US10Y", "DFII10", "REAL_RATE_10Y"]:
                 res = obb.index.price.historical(  # type: ignore[union-attr]
                     symbol=target_ticker,
                     provider=self.default_provider,

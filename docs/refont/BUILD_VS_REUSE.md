@@ -108,7 +108,39 @@ Ce qui reste réellement en faveur de la migration : correction validée par une
 
 ---
 
-## 3. [Template pour futurs audits]
+## 3. Données Macroéconomiques FRED & Dépôts Gold GitHub
+
+**Date d'audit** : 2026-08-06  
+**Contexte** : Intégration de features macroéconomiques (ex: Taux Réel 10 ans FRED `DFII10`, VIX, pétrole) pour alimenter la recherche de signal sur l'Or (`frxXAUUSD`).
+
+### Recherche
+
+1. **fredapi (`mortada/fredapi`)** — client Python de référence pour l'API FRED (Federal Reserve Bank of St. Louis)
+   - **Licence** : MIT-like (Open Source)
+   - **Maturité & Usage** : Bibliothèque standard pour l'extraction de 800 000+ séries macro (TIPS/Taux réels, CPI, Fed Funds Rate).
+   - **Qualité** : API légère, retour sous forme de séries Pandas directement exploitables.
+
+2. **Dépôts Gold Open Source (`backtrader-pullback-window-xauusd`, `zero-was-here/tradingbot`, `Quantitative-XAUUSD-Strategy`)**
+   - **Constat d'audit** :
+     - La plupart réutilisent des règles techniques triviales (EMA/ATR/RSI) sans split train/test ni correction pour tests multiples (`n_eff`), avec des performances sur-ajustées (ex: 175 trades choisis a posteriori).
+     - Le dépôt `tradingbot` propose 140+ features incluant du macro (VIX, pétrole, calendrier).
+
+### Décision
+
+**RÉUTILISER `fredapi` (Adopté)** & **REJETER les dépôts Gold spécifiques comme source de code**.
+
+**Raison** :
+- `fredapi` est une brique d'infrastructure/données pure (aucun risque de sur-ajustement), maintenue et largement adoptée.
+- Les dépôts Gold spécifiques sont **rejetés comme code** en raison de l'absence de rigueur scientifique (pas de validation hors échantillon ni de correction $n_{\text{eff}}$), mais conservés comme **inspiration conceptuelle de features** (extension vers les taux réels `DFII10`, la volatilité VIX, et le pétrole).
+
+**Action** :
+- `fredapi` ajouté à `pyproject.toml`.
+- Provider dédié `src/aegis_trade/infrastructure/data/providers/fred_provider.py` implémenté.
+- `DFII10` (Taux réel 10 ans US) intégré à la liste des candidats macro pour la suite d'Alpha Research.
+
+---
+
+## 4. [Template pour futurs audits]
 
 **Date d'audit** : YYYY-MM-DD  
 **Contexte** : [quel problème/module]

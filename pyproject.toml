@@ -27,6 +27,7 @@ dependencies = [
     "torch>=2.0.0",
     "finrl>=0.3.6",
     "einops>=0.8.2",
+    "fredapi>=0.5.2",
 ]
 
 [project.optional-dependencies]

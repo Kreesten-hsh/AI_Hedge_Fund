@@ -3,23 +3,16 @@
 Ce document liste les missions structurées de l'OS de trading. Il sert de plan de travail séquentiel.
 L'ordre d'implémentation est strictement linéaire (Pipeline Quantitatif).
 
-## TRAJECTOIRE COURANTE — arrêtée le 2026-08-05
+## TRAJECTOIRE COURANTE — mise à jour le 2026-08-06
 
 ```
-Annualisation (Lot 3) ──► GOLD-01 ──► [PAUSE, ÉVALUATION] ──► audit Council/ML  ou  pivot
+GOLD-01 (M1 Tech: REJETÉ) ──► GOLD-MACRO (DFII10 + OpenBB FRED) ──► Audit Council (8 agents) ──► Pivot Fréquence (H4/D1)
 ```
 
-1. **Annualisation** — dernière grandeur du Lot 3 exécutable sans ouvrir le Council. Zone métrique
-   pure, `engine/performance.py` fait autorité. Voir `docs/refont/PLAN_DE_CORRECTION.md`, §
-   « Séquencement interne du Lot 3 ».
-2. **GOLD-01** — troisième actif réel sur l'outillage existant. Valide l'infrastructure (ingestion,
-   coût, exécution) **avant** d'y greffer du ML. Deux prérequis mesurés, détaillés dans la mission :
-   les données Gold actuelles sont du D1 OpenBB, pas du M1 Deriv, et le coût de Gold n'est pas
-   transposable depuis les synthétiques.
-3. **PAUSE explicite.** GOLD-01 est un point de décision, pas une étape à traverser. Si Gold valide
-   l'infrastructure → audit du Council, puis dégel de « Verdict → ordre », `DatasetBuilder` et de la
-   violation `domain/council.py:5`. Si Gold révèle un défaut structurel → on pivote, et le nettoyage
-   du Lot 6 comme la reconstruction d'un pipeline ML attendent.
+1. **GOLD-01 (Clôturé & Rejeté - ADR 0025)** : Coût A/R mesuré à 1.859 bps. Gate économique `domain/tradability` validé dès H5 (>75.6% tradable), mais 0/25 indicateurs techniques significatifs de H5 à H120. Réfute définitivement l'hypothèse des indicateurs techniques simples sur M1.
+2. **GOLD-MACRO (En cours — Priorité 1)** : Évaluation de la famille de features macroéconomiques fondamentales sur Gold via l'extension officielle `openbb-fred` (`OpenBBDataProvider`, ADR 0026). Ingestion et alignement des Taux Réels 10 ans FRED (`DFII10`), DXY et VIX, puis évaluation via `run_feature_research.py`.
+3. **Audit du Council à 8 agents (Priorité 2)** : Soumission du Council multi-agents (`domain/council.py`) à la même grille d'évaluation scientifique (ADR, P&L net contre le péage réel de 1.859 bps, significativité statistique).
+4. **Évaluation de Fréquence / Horizon (Priorité 3)** : En cas d'absence d'alpha à haute fréquence M1, réévaluation du régime de fréquence vers des horizons plus bas (H4 / D1) à forte conviction et frais d'allers-retours très amortis.
 
 Ce qui reste **gelé** jusqu'à cette évaluation : audit du Council (deux Councils coexistent, Lot 6
 point 1), déduplication `Verdict → ordre`, déduplication `DatasetBuilder`, pureté du domaine

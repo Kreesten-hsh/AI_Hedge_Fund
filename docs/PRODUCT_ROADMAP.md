@@ -28,18 +28,20 @@ Remplacer le broker simulé par une connexion à un environnement de Paper Tradi
 ### Critères de réussite
 - Les ordres générés en local sont exécutés et réconciliés sur un compte de démonstration MT5/vn.py.
 
-## Sprint courant : Souveraineté numérique & validation multi-actifs [EN COURS — 2026-08-05]
+## Sprint courant : Validation Macro & Audit Council [EN COURS — 2026-08-06]
 
 ### Objectif
-Terminer la déduplication des grandeurs numériques exécutable hors Council (Lot 3 —
-`docs/refont/PLAN_DE_CORRECTION.md`), puis exercer l'infrastructure sur un **troisième actif réel**
-(GOLD-01) avant d'y greffer une couche ML ou d'auditer le Council.
+Évaluer la puissance prédictive de la **famille de features macroéconomiques fondamentales** sur l'Or (Taux réels 10 ans FRED `DFII10`, DXY, VIX) suite au rejet des indicateurs techniques usuels (ADR 0025), puis soumettre le Council multi-agents à un audit scientifique rigoureux.
 
 ### Trajectoire
 ```
-Annualisation (Lot 3) ──► GOLD-01 ──► [PAUSE, ÉVALUATION] ──► audit Council/ML  ou  pivot
+GOLD-01 (M1 Tech: REJETÉ) ──► GOLD-MACRO (DFII10 + OpenBB FRED) ──► Audit Council (8 agents) ──► Pivot Fréquence (H4/D1)
 ```
-Détail et prérequis mesurés : `docs/BACKLOG.md`, § « TRAJECTOIRE COURANTE » et mission GOLD-01.
+
+### Jalons & Priorités
+1. **GOLD-MACRO** : Ingestion & alignement temporel des séries macro FRED (Taux réels `DFII10`) via `OpenBBDataProvider` (ADR 0026), puis validation de l'alpha prédictif via `domain/tradability` et `run_feature_research.py`.
+2. **AUDIT COUNCIL** : Audit complet du Council à 8 agents (`domain/council.py`) selon la même grille de mesure rigoureuse (ADR, P&L net vs coût réel mesuré de 1.859 bps).
+3. **ÉVALUATION DE FRÉQUENCE** : Si l'absence d'alpha M1 persiste, transition vers des stratégies à horizon plus bas (H4 / D1) privilégiant la conviction sur des mouvements d'amplitude supérieure aux frais de transaction.
 
 ### Contraintes
 - Aucun modèle ML n'est branché avant que GOLD-01 ait rendu son verdict. Le pipeline

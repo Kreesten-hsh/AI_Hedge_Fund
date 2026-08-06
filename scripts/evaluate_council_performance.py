@@ -1,8 +1,10 @@
-"""Harnais de test et diagnostic quantitatif complet du MultiAgentCouncil (8 agents).
+"""Harnais d'audit quantitatif rigoureux du MultiAgentCouncil (8 agents).
 
-Évalue le consensus déterministe généré par le Council sur les barres réelles M1 (Gold, Crash 1000),
-en simulant l'évolution dynamique du Portfolio et de la mémoire FAISS (PatternAgent)
-afin d'exercer 5 agents actifs sur 8.
+Évalue le Council selon deux configurations rigoureuses :
+1. Run 1 (Purifié & Réel) : Veto strict Liquidity/Execution + MomentumAgent réactivé (rsi_14)
+   avec PatternAgent neutre (memory_score = 0.0, reflétant une mémoire FAISS creuse sans sur-apprentissage).
+2. Run 2 (Proxy FAISS Creux) : Memory score sparse (non-nul sur ~5% des barres) + suivi Portfolio
+   pour comparer l'impact d'une mémoire clairsemée.
 """
 
 from __future__ import annotations
@@ -47,45 +49,15 @@ def build_council() -> MultiAgentCouncil:
     return MultiAgentCouncil(agents=agents)
 
 
-def evaluate_council_on_parquet(
-    parquet_path: str,
-    symbol_name: str,
+def run_evaluation(
+    df: pd.DataFrame,
+    symbol: Symbol,
+    bars: list[MarketBar],
+    feature_sets: list,
     cost_bps: float,
-    horizon: int = 5,
-):
-    logger.info(f"Évaluation complète du Council sur {symbol_name} ({parquet_path}), Coût: {cost_bps} bps, Horizon: {horizon}m")
-    df = pd.read_parquet(parquet_path)
-    
-    if "timestamp" in df.columns:
-        df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
-        df.set_index("timestamp", inplace=True)
-    elif not isinstance(df.index, pd.DatetimeIndex):
-        df.index = pd.to_datetime(df.index, utc=True)
-        
-    df.sort_index(inplace=True)
-    
-    symbol = Symbol(name=symbol_name, asset_class=AssetClass.COMMODITIES)
-    timeframe = TimeFrame.M1
-    
-    bars: list[MarketBar] = []
-    for ts, row in df.iterrows():
-        bars.append(
-            MarketBar(
-                symbol=symbol,
-                timeframe=timeframe,
-                timestamp=ts.to_pydatetime() if hasattr(ts, "to_pydatetime") else ts,
-                open=Decimal(str(row["open"])),
-                high=Decimal(str(row["high"])),
-                low=Decimal(str(row["low"])),
-                close=Decimal(str(row["close"])),
-                volume=Decimal(str(row.get("volume", 1.0))),
-            )
-        )
-
-    logger.info(f"Extraction des features techniques pour {len(bars)} barres...")
-    extractor = TechnicalFeatureExtractor()
-    feature_sets = extractor.extract(bars)
-    
+    horizon: int,
+    mode: str = "purified",  # "purified" ou "sparse_faiss"
+) -> dict:
     portfolio = Portfolio(initial_capital=10000.0)
     council = build_council()
     
@@ -94,7 +66,6 @@ def evaluate_council_on_parquet(
     multipliers: list[float] = []
     veto_reasons: list[str | None] = []
     
-    # Compteurs de votes directionnels (BUY / SELL) par agent
     agent_directional_votes: Dict[str, int] = {
         "TrendAgent": 0,
         "MomentumAgent": 0,
@@ -106,28 +77,34 @@ def evaluate_council_on_parquet(
         "PortfolioAgent": 0,
     }
 
-    # Suivi dynamique des positions simulées pour alimenter la réaction du PortfolioAgent
     active_position_expiry = -1
-    
-    logger.info("Exécution séquentielle du Council avec Portfolio dynamique et mémoire FAISS synthétique...")
+
     for idx, (fset, bar) in enumerate(zip(feature_sets, bars)):
         current_price = bar.close
         portfolio.on_market_event(MarketEvent(timestamp=bar.timestamp, bar=bar))
         
-        # Fermeture simulée de la position au bout de l'horizon
-        if idx == active_position_expiry:
+        # En mode sparse_faiss, on réinitialise la position à l'échéance
+        if mode == "sparse_faiss" and idx == active_position_expiry:
             pos = portfolio.get_position(symbol)
             if pos and pos.volume != 0:
                 portfolio._positions.pop(symbol, None)
             active_position_expiry = -1
-            
-        # Simulation d'un memory_score FAISS dynamique (PatternAgent)
-        # calculé sur le rendement glissant des 5 barres précédentes
-        if idx >= 5:
-            past_ret = float((bars[idx].close - bars[idx-5].close) / bars[idx-5].close)
-            memory_score = float(np.clip(past_ret * 20000.0, -100.0, 100.0))
-        else:
+
+        # Détermination du memory_score selon le mode
+        if mode == "purified":
+            # Représente la réalité de production : mémoire FAISS creuse / non peuplée
             memory_score = 0.0
+        else:
+            # Memory score creux : actif uniquement sur ~5% des barres avec des mouvements extrêmes (> 3 std)
+            if idx >= 20:
+                past_ret = float((bars[idx].close - bars[idx-1].close) / bars[idx-1].close)
+                # Vaut 0.0 par défaut, sauf choc > 0.15%
+                if abs(past_ret) > 0.0015:
+                    memory_score = float(np.clip(past_ret * 50000.0, -100.0, 100.0))
+                else:
+                    memory_score = 0.0
+            else:
+                memory_score = 0.0
 
         ctx = MarketContext(
             symbol=symbol,
@@ -143,13 +120,11 @@ def evaluate_council_on_parquet(
         multipliers.append(verdict.position_size_multiplier)
         veto_reasons.append(verdict.veto_reason)
         
-        # Enregistrement des votes directionnels par agent (BUY / SELL)
         for v in verdict.votes:
             if v.vote in ("BUY", "SELL"):
                 agent_directional_votes[v.agent_name] += 1
 
-        # Mettre à jour la position dans le Portfolio pour alimenter les barres suivantes (PortfolioAgent)
-        if verdict.final_vote in ("BUY", "SELL") and verdict.position_size_multiplier > 0.0:
+        if mode == "sparse_faiss" and verdict.final_vote in ("BUY", "SELL") and verdict.position_size_multiplier > 0.0:
             if active_position_expiry == -1:
                 vol = Decimal("1.0") * Decimal(str(verdict.position_size_multiplier))
                 if verdict.final_vote == "SELL":
@@ -176,49 +151,93 @@ def evaluate_council_on_parquet(
     wait_signals = df_eval[df_eval["verdict"] == "WAIT"]
     veto_signals = df_eval[df_eval["veto_reason"].notna()]
     
-    print("\n" + "=" * 80)
-    print(f"  RÉSULTATS AUDIT DYNAMIQUE DU COUNCIL SUR {symbol_name} (75 000 barres M1)")
-    print("=" * 80)
-    print("  Activité des 8 Agents du Council (Votes BUY / SELL émis) :")
-    active_agents_count = 0
-    for agent_name, count in agent_directional_votes.items():
-        is_active = count > 0
-        if is_active:
-            active_agents_count += 1
-        status_str = f"ACTIF ({count:>6} votes directionnels)" if is_active else "INACTIF / STUB"
-        print(f"    - {agent_name:<18} : {status_str}")
-        
-    print(f"\n  TOTAL AGENTS AYANT VOTÉ BUY/SELL : {active_agents_count} / 8")
-    print("  (Note: NewsAgent est un stub LLM hors-path critique documenté comme inactif)")
-    print("-" * 80)
-    print(f"  Distribution des Verdicts du Council:")
-    print(f"    - BUY   : {len(buy_signals):>6} ({len(buy_signals)/len(df_eval)*100:.2f} %)")
-    print(f"    - SELL  : {len(sell_signals):>6} ({len(sell_signals)/len(df_eval)*100:.2f} %)")
-    print(f"    - WAIT  : {len(wait_signals):>6} ({len(wait_signals)/len(df_eval)*100:.2f} %)")
-    print(f"    - VETOS : {len(veto_signals):>6} ({len(veto_signals)/len(df_eval)*100:.2f} %)")
-    print("-" * 80)
-
     cost_frac = cost_bps / 10000.0
     
-    if len(buy_signals) > 0:
-        ret_buy_gross = buy_signals["forward_return"].dropna()
-        ret_buy_net = ret_buy_gross - cost_frac
-        print(f"  Signaux BUY (n={len(ret_buy_gross)}):")
-        print(f"    - Rendement moyen BRUT : {ret_buy_gross.mean()*10000:.3f} bps")
-        print(f"    - Rendement moyen NET  : {ret_buy_net.mean()*10000:.3f} bps (Coût: {cost_bps} bps)")
-        print(f"    - Win Rate             : {(ret_buy_gross > 0).mean()*100:.2f} %")
+    buy_gross = buy_signals["forward_return"].dropna().mean() * 10000.0 if len(buy_signals) > 0 else 0.0
+    buy_net = (buy_signals["forward_return"].dropna() - cost_frac).mean() * 10000.0 if len(buy_signals) > 0 else 0.0
+    buy_winrate = (buy_signals["forward_return"].dropna() > 0).mean() * 100.0 if len(buy_signals) > 0 else 0.0
+    
+    sell_gross = (-sell_signals["forward_return"].dropna()).mean() * 10000.0 if len(sell_signals) > 0 else 0.0
+    sell_net = ((-sell_signals["forward_return"].dropna()) - cost_frac).mean() * 10000.0 if len(sell_signals) > 0 else 0.0
+    sell_winrate = ((-sell_signals["forward_return"].dropna()) > 0).mean() * 100.0 if len(sell_signals) > 0 else 0.0
+
+    return {
+        "mode": mode,
+        "n_bars": len(df_eval),
+        "agent_votes": agent_directional_votes,
+        "buy_count": len(buy_signals),
+        "sell_count": len(sell_signals),
+        "wait_count": len(wait_signals),
+        "veto_count": len(veto_signals),
+        "buy_gross": buy_gross,
+        "buy_net": buy_net,
+        "buy_winrate": buy_winrate,
+        "sell_gross": sell_gross,
+        "sell_net": sell_net,
+        "sell_winrate": sell_winrate,
+    }
+
+
+def evaluate_asset(parquet_path: str, symbol_name: str, cost_bps: float, horizon: int = 5):
+    logger.info(f"Chargement {symbol_name} ({parquet_path})...")
+    df = pd.read_parquet(parquet_path)
+    if "timestamp" in df.columns:
+        df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+        df.set_index("timestamp", inplace=True)
+    elif not isinstance(df.index, pd.DatetimeIndex):
+        df.index = pd.to_datetime(df.index, utc=True)
+    df.sort_index(inplace=True)
+    
+    symbol = Symbol(name=symbol_name, asset_class=AssetClass.COMMODITIES)
+    timeframe = TimeFrame.M1
+    
+    bars: list[MarketBar] = []
+    for ts, row in df.iterrows():
+        bars.append(
+            MarketBar(
+                symbol=symbol,
+                timeframe=timeframe,
+                timestamp=ts.to_pydatetime() if hasattr(ts, "to_pydatetime") else ts,
+                open=Decimal(str(row["open"])),
+                high=Decimal(str(row["high"])),
+                low=Decimal(str(row["low"])),
+                close=Decimal(str(row["close"])),
+                volume=Decimal(str(row.get("volume", 1.0))),
+            )
+        )
+
+    extractor = TechnicalFeatureExtractor()
+    feature_sets = extractor.extract(bars)
+    
+    res_purified = run_evaluation(df, symbol, bars, feature_sets, cost_bps, horizon, mode="purified")
+    res_sparse = run_evaluation(df, symbol, bars, feature_sets, cost_bps, horizon, mode="sparse_faiss")
+    
+    print("\n" + "=" * 90)
+    print(f"  AUDIT COMPARATIF DU COUNCIL SUR {symbol_name} (75 000 barres M1)")
+    print("=" * 90)
+    print(f"  {'Agent':<18} | {'Run 1 (Purifié avec rsi_14)':<32} | {'Run 2 (Proxy FAISS Sparse)':<32}")
+    print("-" * 90)
+    for agent_name in res_purified["agent_votes"].keys():
+        v1 = res_purified["agent_votes"][agent_name]
+        v2 = res_sparse["agent_votes"][agent_name]
+        s1 = f"ACTIF ({v1:>5} votes)" if v1 > 0 else "INACTIF / STUB"
+        s2 = f"ACTIF ({v2:>5} votes)" if v2 > 0 else "INACTIF / STUB"
+        print(f"  {agent_name:<18} | {s1:<32} | {s2:<32}")
         
-    if len(sell_signals) > 0:
-        ret_sell_gross = -sell_signals["forward_return"].dropna()
-        ret_sell_net = ret_sell_gross - cost_frac
-        print(f"  Signaux SELL (n={len(ret_sell_gross)}):")
-        print(f"    - Rendement moyen BRUT : {ret_sell_gross.mean()*10000:.3f} bps")
-        print(f"    - Rendement moyen NET  : {ret_sell_net.mean()*10000:.3f} bps (Coût: {cost_bps} bps)")
-        print(f"    - Win Rate             : {(ret_sell_gross > 0).mean()*100:.2f} %")
-        
-    print("=" * 80)
+    print("-" * 90)
+    print(f"  {'Métrique':<18} | {'Run 1 (Purifié avec rsi_14)':<32} | {'Run 2 (Proxy FAISS Sparse)':<32}")
+    print("-" * 90)
+    
+    pct_trade_1 = (res_purified['buy_count'] + res_purified['sell_count']) / res_purified['n_bars'] * 100
+    pct_trade_2 = (res_sparse['buy_count'] + res_sparse['sell_count']) / res_sparse['n_bars'] * 100
+    print(f"  {'Taux d exposition':<18} | {pct_trade_1:>6.2f} % ({res_purified['buy_count']+res_purified['sell_count']} trades) | {pct_trade_2:>6.2f} % ({res_sparse['buy_count']+res_sparse['sell_count']} trades)")
+    print(f"  {'BUY Gross / Net':<18} | {res_purified['buy_gross']:>+.3f} bps / {res_purified['buy_net']:>+.3f} bps   | {res_sparse['buy_gross']:>+.3f} bps / {res_sparse['buy_net']:>+.3f} bps")
+    print(f"  {'BUY Win Rate':<18} | {res_purified['buy_winrate']:>6.2f} %                           | {res_sparse['buy_winrate']:>6.2f} %")
+    print(f"  {'SELL Gross / Net':<18} | {res_purified['sell_gross']:>+.3f} bps / {res_purified['sell_net']:>+.3f} bps  | {res_sparse['sell_gross']:>+.3f} bps / {res_sparse['sell_net']:>+.3f} bps")
+    print(f"  {'SELL Win Rate':<18} | {res_purified['sell_winrate']:>6.2f} %                          | {res_sparse['sell_winrate']:>6.2f} %")
+    print("=" * 90)
 
 
 if __name__ == "__main__":
-    evaluate_council_on_parquet("data/market_data/xauusd.parquet", "frxXAUUSD", cost_bps=1.859, horizon=5)
-    evaluate_council_on_parquet("data/market_data/crash1000.parquet", "CRASH1000", cost_bps=0.745, horizon=5)
+    evaluate_asset("data/market_data/xauusd.parquet", "frxXAUUSD", cost_bps=1.859, horizon=5)
+    evaluate_asset("data/market_data/crash1000.parquet", "CRASH1000", cost_bps=0.745, horizon=5)

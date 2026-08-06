@@ -113,30 +113,21 @@ Ce qui reste réellement en faveur de la migration : correction validée par une
 **Date d'audit** : 2026-08-06  
 **Contexte** : Intégration de features macroéconomiques (ex: Taux Réel 10 ans FRED `DFII10`, VIX, pétrole) pour alimenter la recherche de signal sur l'Or (`frxXAUUSD`).
 
-### Recherche
+### Recherche OSS-First (Une seule source de vérité)
 
-1. **fredapi (`mortada/fredapi`)** — client Python de référence pour l'API FRED (Federal Reserve Bank of St. Louis)
-   - **Licence** : MIT-like (Open Source)
-   - **Maturité & Usage** : Bibliothèque standard pour l'extraction de 800 000+ séries macro (TIPS/Taux réels, CPI, Fed Funds Rate).
-   - **Qualité** : API légère, retour sous forme de séries Pandas directement exploitables.
+1. **Extension officielle OpenBB (`openbb-fred`)** :
+   - **Audit de l'existant** : `OpenBBDataProvider` (`openbb>=4.0.0`) est déjà la brique unifiée d'accès aux données du projet.
+   - **Découverte** : L'extension officielle `openbb-fred` active l'accès natif aux 800 000+ séries de la St. Louis Fed via l'interface unifiée `obb.economy.fred_series(symbol='DFII10', provider='fred')`.
+   - **Décision** : **ADOPTÉE**. Évite la création redondante d'un provider parallèle (`fredapi`), respectant le principe de la source de vérité unique et la Règle 4.
 
-2. **Dépôts Gold Open Source (`backtrader-pullback-window-xauusd`, `zero-was-here/tradingbot`, `Quantitative-XAUUSD-Strategy`)**
-   - **Constat d'audit** :
-     - La plupart réutilisent des règles techniques triviales (EMA/ATR/RSI) sans split train/test ni correction pour tests multiples (`n_eff`), avec des performances sur-ajustées (ex: 175 trades choisis a posteriori).
-     - Le dépôt `tradingbot` propose 140+ features incluant du macro (VIX, pétrole, calendrier).
+2. **Dépôts Gold Open Source (`backtrader-pullback-window-xauusd`, `zero-was-here/tradingbot`, `Quantitative-XAUUSD-Strategy`)** :
+   - **Constat d'audit** : La plupart des dépôts spécifiques réutilisent des règles techniques triviales (EMA/ATR/RSI) sans split train/test ni correction $n_{\text{eff}}$.
+   - **Décision** : **REJETÉS comme source de code** (risque de sur-ajustement), mais conservés comme **inspiration conceptuelle de features macro** (taux réels `DFII10`, régimes VIX, spread pétrole/or).
 
-### Décision
-
-**RÉUTILISER `fredapi` (Adopté)** & **REJETER les dépôts Gold spécifiques comme source de code**.
-
-**Raison** :
-- `fredapi` est une brique d'infrastructure/données pure (aucun risque de sur-ajustement), maintenue et largement adoptée.
-- Les dépôts Gold spécifiques sont **rejetés comme code** en raison de l'absence de rigueur scientifique (pas de validation hors échantillon ni de correction $n_{\text{eff}}$), mais conservés comme **inspiration conceptuelle de features** (extension vers les taux réels `DFII10`, la volatilité VIX, et le pétrole).
-
-**Action** :
-- `fredapi` ajouté à `pyproject.toml`.
-- Provider dédié `src/aegis_trade/infrastructure/data/providers/fred_provider.py` implémenté.
-- `DFII10` (Taux réel 10 ans US) intégré à la liste des candidats macro pour la suite d'Alpha Research.
+### Action
+- Extension `openbb-fred` ajoutée à `pyproject.toml`.
+- Méthode `fetch_macro` implémentée directement dans `OpenBBDataProvider` via `obb.economy.fred_series`.
+- `DFII10` (Taux réel 10 ans US) routé via le provider OpenBB unique.
 
 ---
 

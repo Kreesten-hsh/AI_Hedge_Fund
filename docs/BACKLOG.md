@@ -14,9 +14,8 @@ GOLD-01 (M1 Tech: REJETÉ) ──► GOLD-MACRO (DFII10 + OpenBB FRED) ──►
 3. **Audit du Council à 8 agents (Clôturé & Rejeté - ADR 0028)** : Évaluation séquentielle du Council déterministe (`domain/council.py`) sur 75k barres M1 (Gold, Crash 1000). Le consensus émet >36% de trades à mouvement moyen (+0.15 bps) 11x inférieur aux frais (1.859 bps), produisant un P&L net négatif (-1.70 bps par trade). Réfuté sur M1.
 4. **Pivot Fréquence & Régime d'Horizon H4/D1 (En cours — Priorité 1)** : Évaluation systématique du changement de régime vers des horizons temporels plus bas (H4 et Quotidien D1). Mesure des mouvements moyens et de la rentabilité nette lorsque les allers-retours sont amortis sur des tendances macro à forte conviction.
 
-Ce qui reste **gelé** jusqu'à cette évaluation : audit du Council (deux Councils coexistent, Lot 6
-point 1), déduplication `Verdict → ordre`, déduplication `DatasetBuilder`, pureté du domaine
-(`domain/council.py:5`). Gelé ≠ abandonné : **Lot 3 complet reste prérequis obligatoire avant AI-07b
+Ce qui reste **gelé** jusqu'à cette évaluation : déduplication `Verdict → ordre`, déduplication `DatasetBuilder`, pureté du domaine
+(`domain/council.py:5`). (Note: La coexistence des deux Councils a été réglée par la migration d'AiDecisionEngine vers MultiAgentCouncil et docs/LEGACY_COUNCIL_MIGRATION.md). Gelé ≠ abandonné : **Lot 3 complet reste prérequis obligatoire avant AI-07b
 (argent réel).**
 
 ## Phase 1 : Cœur du Moteur de Simulation

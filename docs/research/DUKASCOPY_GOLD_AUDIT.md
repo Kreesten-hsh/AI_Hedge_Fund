@@ -1,6 +1,6 @@
 # AUDIT QUANTITATIF DE LA SOURCE DUKASCOPY XAUUSD VS DERIV
 
-**Date d'exécution** : 2026-08-06 20:16 UTC
+**Date d'exécution** : 2026-08-06 20:24 UTC
 
 ## 1. Sondage de Profondeur Historique Dukascopy
 

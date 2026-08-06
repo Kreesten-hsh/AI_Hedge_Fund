@@ -2,6 +2,7 @@ import logging
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Sequence
+import pandas as pd
 from openbb import obb
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
@@ -24,7 +25,7 @@ class OpenBBDataProvider(IDataProvider):
     """
     Implementation of IDataProvider using OpenBB (v4).
     Returns purely domain objects and handles API errors securely with retries.
-    Uses openbb-fred extension for macro economic series (DFII10, etc.).
+    Uses openbb-fred extension for macro economic series with fallback to FRED direct CSV.
     """
 
     def __init__(self, default_provider: str = "yfinance", timeout: int = 15):
@@ -101,6 +102,23 @@ class OpenBBDataProvider(IDataProvider):
                 
         return bars
 
+    def _fetch_fred_csv_fallback(
+        self, series_id: str, start: datetime, end: datetime
+    ) -> pd.DataFrame:
+        """Fallback direct CSV depuis St. Louis Fed sans clé d'API."""
+        url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
+        df = pd.read_csv(url)
+        df["observation_date"] = pd.to_datetime(df["observation_date"])
+        df.set_index("observation_date", inplace=True)
+        # Filtrer la plage de dates
+        df = df.loc[(df.index >= pd.to_datetime(start.strftime("%Y-%m-%d"))) & 
+                    (df.index <= pd.to_datetime(end.strftime("%Y-%m-%d")))]
+        # Remplacer les valeurs non numériques (ex: '.') par NaN
+        df[series_id] = pd.to_numeric(df[series_id], errors="coerce")
+        df.dropna(inplace=True)
+        df.rename(columns={series_id: "value"}, inplace=True)
+        return df
+
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
@@ -110,12 +128,13 @@ class OpenBBDataProvider(IDataProvider):
     def fetch_macro(
         self, symbol: Symbol, start: datetime, end: datetime
     ) -> Sequence[EconomicIndicator]:
-        """Récupère des séries économiques (ex: DFII10 pour les Taux Réels) via openbb-fred."""
+        """Récupère des séries économiques (ex: DFII10 pour les Taux Réels) via openbb-fred ou fallback direct CSV FRED."""
         fred_ticker_map = {
             "REAL_RATE_10Y": "DFII10",
         }
         series_id = fred_ticker_map.get(symbol.name, symbol.name)
         
+        df = pd.DataFrame()
         try:
             res = obb.economy.fred_series(  # type: ignore[union-attr]
                 symbol=series_id,
@@ -125,12 +144,17 @@ class OpenBBDataProvider(IDataProvider):
                 timeout=self.timeout,
             )
             df = res.to_df()
-            if df.empty:
-                logger.warning(f"OpenBB FRED returned empty data for {symbol.name} ({start} - {end})")
-                return []
         except Exception as e:
-            logger.error(f"OpenBB FRED API failed to fetch macro series {series_id}: {e}")
-            raise DataProviderError(f"OpenBB FRED API Error: {e}") from e
+            logger.info(f"OpenBB FRED sans clé API, bascule sur le fallback public CSV St. Louis Fed pour {series_id}...")
+            try:
+                df = self._fetch_fred_csv_fallback(series_id, start, end)
+            except Exception as fallback_err:
+                logger.error(f"Échec du fallback CSV FRED pour {series_id}: {fallback_err}")
+                raise DataProviderError(f"FRED API/CSV Error: {fallback_err}") from fallback_err
+
+        if df.empty:
+            logger.warning(f"FRED returned empty data for {symbol.name} ({start} - {end})")
+            return []
 
         indicators: list[EconomicIndicator] = []
         for index, row in df.iterrows():
@@ -139,7 +163,6 @@ class OpenBBDataProvider(IDataProvider):
                 if dt.tzinfo is None:
                     dt = dt.replace(tzinfo=timezone.utc)
                 
-                # 'value' ou nom de la série dans les colonnes du DataFrame
                 col_val = row.get("value", row.iloc[0] if len(row) > 0 else None)
                 if col_val is None or str(col_val).lower() == "nan":
                     continue

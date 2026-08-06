@@ -10,9 +10,9 @@ GOLD-01 (M1 Tech: REJETÉ) ──► GOLD-MACRO (DFII10 + OpenBB FRED) ──►
 ```
 
 1. **GOLD-01 (Clôturé & Rejeté - ADR 0025)** : Coût A/R mesuré à 1.859 bps. Gate économique `domain/tradability` validé dès H5 (>75.6% tradable), mais 0/25 indicateurs techniques significatifs de H5 à H120. Réfute définitivement l'hypothèse des indicateurs techniques simples sur M1.
-2. **GOLD-MACRO (En cours — Priorité 1)** : Évaluation de la famille de features macroéconomiques fondamentales sur Gold via l'extension officielle `openbb-fred` (`OpenBBDataProvider`, ADR 0026). Ingestion et alignement des Taux Réels 10 ans FRED (`DFII10`), DXY et VIX, puis évaluation via `run_feature_research.py`.
-3. **Audit du Council à 8 agents (Priorité 2)** : Soumission du Council multi-agents (`domain/council.py`) à la même grille d'évaluation scientifique (ADR, P&L net contre le péage réel de 1.859 bps, significativité statistique).
-4. **Évaluation de Fréquence / Horizon (Priorité 3)** : En cas d'absence d'alpha à haute fréquence M1, réévaluation du régime de fréquence vers des horizons plus bas (H4 / D1) à forte conviction et frais d'allers-retours très amortis.
+2. **GOLD-MACRO (Clôturé & Rejeté - ADR 0027)** : Ingestion et alignement des Taux Réels 10 ans FRED (`DFII10`) et DXY sur 75k barres M1 Gold. 0/6 features macro significatives de H5 à H240 ($|t| \le 1.93$). Les séries quotidiennes macro ne prédisent pas le bruit M1.
+3. **Audit du Council à 8 agents (En cours — Priorité 1)** : Soumission du Council multi-agents (`domain/council.py`) à la même grille d'évaluation scientifique (ADR, P&L net contre le péage réel de 1.859 bps, significativité statistique).
+4. **Évaluation de Fréquence / Horizon (Priorité 2)** : En cas d'absence d'alpha à haute fréquence M1, réévaluation du régime de fréquence vers des horizons plus bas (H4 / D1) à forte conviction et frais d'allers-retours très amortis.
 
 Ce qui reste **gelé** jusqu'à cette évaluation : audit du Council (deux Councils coexistent, Lot 6
 point 1), déduplication `Verdict → ordre`, déduplication `DatasetBuilder`, pureté du domaine

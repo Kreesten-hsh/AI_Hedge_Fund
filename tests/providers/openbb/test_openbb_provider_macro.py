@@ -40,13 +40,15 @@ def test_openbb_fetch_macro_fred_success(mock_obb):
 
 
 @patch("aegis_trade.infrastructure.data.providers.openbb_provider.obb")
-def test_openbb_fetch_macro_fred_error(mock_obb):
+@patch.object(OpenBBDataProvider, "_fetch_fred_csv_fallback")
+def test_openbb_fetch_macro_fred_error(mock_fallback, mock_obb):
     mock_obb.economy.fred_series.side_effect = Exception("FRED provider error")
+    mock_fallback.side_effect = Exception("Fallback error")
 
     provider = OpenBBDataProvider()
     symbol = Symbol(name="DFII10", asset_class=AssetClass.INDICES)
 
-    with pytest.raises(DataProviderError, match="OpenBB FRED API Error"):
+    with pytest.raises(DataProviderError, match="FRED API/CSV Error"):
         provider.fetch_macro(
             symbol,
             start=datetime(2026, 8, 1, tzinfo=timezone.utc),

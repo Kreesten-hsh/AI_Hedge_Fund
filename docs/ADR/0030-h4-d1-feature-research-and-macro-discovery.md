@@ -1,58 +1,56 @@
-# ADR 0030 — Audit Économétrique H4/D1 & Réfutation de la Régression Fallacieuse DXY (TÂCHE 2)
+# ADR 0030 — Audit Économétrique H4/D1, Cointégration & Clôture de la Recherche d'Alpha (TÂCHE 2)
 
-- **Statut** : REJETÉ / CLÔTURÉ (0/188 Features Validées — Réfutation Complète des Indicateurs Techniques, Microstructure Spike et Artefact DXY I(1))
+- **Statut** : REJETÉ / CLÔTURÉ (0/216 Features Validées — Réfutation Complète des Indicateurs Techniques, Microstructure Spike, Artefact DXY I(1) et Positionnement CFTC COT / GLD ETF)
 - **Date** : 2026-08-07
-- **Contexte technique** : `scripts/run_h4_d1_feature_research.py`, `scripts/diagnostics/audit_spurious_dxy_cointegration.py`, `docs/research/DXY_COINTEGRATION_AUDIT_REPORT.md`
+- **Contexte technique** : `scripts/run_h4_d1_feature_research.py`, `scripts/run_positioning_feature_research.py`, `docs/research/POSITIONING_FEATURE_RESEARCH_REPORT.md`
 - **Dépend de** : ADR 0021 (péage 1.859 bps), ADR 0027 (Macro M1), ADR 0029 (Pivot H4/D1)
-- **Résout** : Tâche 2 de la Roadmap — Recherche d'Alpha & Significativité Statistique sous Contrôle Rigoureux d'Intégration et de Tests Multiples
+- **Résout** : Tâche 2 de la Roadmap — Recherche d'Alpha & Significativité Statistique sous Contrôle Rigoureux d'Intégration, Cointégration et Tests Multiples
 
 ---
 
 ## Contexte et Protocole Statistique
 
-Dans le cadre du pivot d'horizon H4/D1 (ADR 0029), la Tâche 2 visait à évaluer la significativité statistique ($t$-statistique Newey-West HAC ajustée pour le chevauchement, Spearman IC) de **188 hypothèses indépendantes** sur Gold (`XAUUSD` Dukascopy 11.6 ans) et Synthétiques (`CRASH1000`, `BOOM1000` Deriv Natif H4).
-
-Le protocole imposait :
-1. Un contrôle des fausses découvertes via **Benjamini-Hochberg (FDR $q = 0.05$)** et **Bonferroni ($\alpha_{\text{bonf}} = 0.000266 \implies |t| \ge 3.65$)**.
-2. Un audit d'intégration **Augmented Dickey-Fuller (ADF)** et de cointégration **Engle-Granger** sur les séries de niveau macro pour prévenir tout artefact de régression fallacieuse (*Spurious Regression*, Granger & Newbold 1974).
-
----
-
-## 1. Audit Econométrique : La Fallacie du Niveau DXY (`feat_macro_dxy_level`)
-
-Bien que la feature `feat_macro_dxy_level` ait initialement affiché une statistique $t = +3.72$ ($p = 0.0002$) sur Gold H4, l'audit économétrique spécialisé a révélé la signature exacte d'une **régression fallacieuse** :
-
-1. **Test d'Intégration ADF** :
-   - Gold Close D1 : $ADF = +0.70 > -2.86 \implies \mathbf{I(1) \text{ Non-Stationnaire}}$.
-   - DXY Level D1 (`DTWEXBGS`) : $ADF = -2.68 > -2.86 \implies \mathbf{I(1) \text{ Non-Stationnaire}}$.
-   - Gold Returns & DXY 1d Diff : $ADF = -24.34 \text{ et } -24.23 < -2.86 \implies \mathbf{I(0) \text{ Stationnaires}}$.
-2. **Test de Cointégration d'Engle-Granger** :
-   - D1 Résidus Spread : $ADF = -1.09 \gg -3.34$ (Seuil 5%) $\implies$ ❌ **AUCUNE COINTÉGRATION**.
-   - H4 Résidus Spread : $ADF = -0.97 \gg -3.34$ (Seuil 5%) $\implies$ ❌ **AUCUNE COINTÉGRATION**.
-3. **Comportement des Variations Stationnaires $I(0)$** :
-   - Les variations de 1 jour (`dxy_change_1d`) et 5 jours (`dxy_change_5d`) affichent un $t$-statistique plat ($|t| < 2.0$, non significatif).
-
-**Conclusion Économétrique** : Le $t$-statistique de $+3.72$ sur le niveau DXY n'était qu'un artefact du chevauchement de deux tendances non-stationnaires $I(1)$ indépendantes. Sans relation de cointégration, le niveau n'a aucun pouvoir prédictif. La feature est **définitivement rejetée**.
+Dans le cadre de la Tâche 2, l'ensemble des pistes d'hypothèses sur Gold (`XAUUSD` Dukascopy 11.6 ans) et Synthétiques (`CRASH1000`, `BOOM1000` Deriv Natif H4) ont été évaluées de manière exhaustive sous contrôle statistique rigoureux :
+1. **Contrôle des Tests Multiples** : **Benjamini-Hochberg (FDR $q = 0.05$)** et **Bonferroni ajusté** par famille d'hypothèses.
+2. **Garde-Fou Économétrique ADR 0030** : Audit d'intégration **Augmented Dickey-Fuller (ADF)** et test de cointégration **Engle-Granger** sur chaque niveau brut avant évaluation, éliminant tout artefact de régression fallacieuse (*Spurious Regression*, Granger & Newbold 1974).
+3. **Alignement Causal Stricte** : CFTC COT décalé de 6 jours calendaires (positions du mardi utilisables le Lundi suivant 00:00 UTC), éliminant tout lookahead bias.
 
 ---
 
-## 2. Synthèse Finale des 188 Hypothèses de la Tâche 2
+## 1. Synthèse Globale Exhaustive des 216 Hypothèses Évaluées
 
-| Famille d'Actifs & Features | Hypothèses Évaluées ($N$) | Brut ($|t| \ge 2.0$) | FDR BH ($q=0.05$) | Après Audit Cointégration | Statut Final |
+| Famille d'Actifs & Features | Hypothèses Évaluées ($N$) | Brut ($|t| \ge 2.0$) | Post-Correction FDR BH ($q=0.05$) | Post-Audit Cointégration / ADF | Statut Final |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Gold Groupe A (Technique D1 & H4)** | 76 | 0 | 0 | **0** | ❌ **RÉFUTÉ** |
 | **Gold Groupe B (Macro FRED D1 & H4)** | 52 | 8 | 2 (DXY Level) | **0 (Rejet Spurious $I(1)$)** | ❌ **RÉFUTÉ** |
+| **Gold Groupe C (Positionnement COT & ETF)** | 28 | 0 | 0 | **0 ($I(0)$ non significatif)** | ❌ **RÉFUTÉ** |
 | **Synthétiques (Crash/Boom H4 Spike)** | 60 | 6 | 0 | **0 (Rejet FDR BH)** | ❌ **RÉFUTÉ** |
-| **TOTAL ÉVALUÉ** | **188** | **14 (7.4%)** | **2 (1.1%)** | **0 / 188 (0.0%)** | ❌ **RÉFUTATION TOTALE** |
+| **TOTAL ÉVALUÉ** | **216** | **14 (6.5%)** | **2 (0.9%)** | **0 / 216 (0.0%)** | ❌ **RÉFUTATION TOTALE** |
 
 ---
 
-## 3. Décisions d'Architecture Scellées
+## 2. Analyse Approfondie par Famille d'Hypothèses
 
-1. **Fermeture Définitive de la Tâche 2 (0/188 Features Validées)** :
-   - Aucune des 188 caractéristiques évaluées (Technique, Macro FRED, Microstructure Spike) n'a démontré de pouvoir prédictif réel et résistant aux tests d'intégration et de correction pour tests multiples.
-2. **Consignation du Garde-Fou Économétrique** :
-   - Interdiction formelle d'évaluer ou d'inclure des caractéristiques en niveau brut $I(1)$ sans test de stationnarité (ADF) et de cointégration préalable (Engle-Granger).
-3. **Consolidations des Rejets du Projet** :
-   - M1 Haute Fréquence (Technique, Macro, Council) : RÉFUTÉ (ADR 0025, 0027, 0028).
-   - H4/D1 Pivot Fréquence (Technique, Microstructure, Macro Niveaux) : RÉFUTÉ (ADR 0030).
+### A. Positionnement & Flux (CFTC COT Gold Net Speculative & SPDR GLD ETF Flows)
+- **CFTC COT (604 semaines 2015-2026)** :
+  - `cot_net_spec_level` ($ADF = -11.68 < -2.86 \implies I(0)$ Stationnaire).
+  - Spearman IC $\in [-0.023, +0.012]$, $t$-stats Newey-West HAC $\le 0.48$ ($p \ge 0.63$).
+  - **Verdict** : **0 / 28 paires significatives**. Le positionnement des spéculateurs à 3 jours ouvrés de délai ne possède aucun pouvoir prédictif sur les retours Gold D1/H4.
+
+### B. Audit Econométrique DXY Level (`feat_macro_dxy_level`)
+- **DXY Level D1 & H4** : $ADF = -2.68 > -2.86 \implies I(1)$ Non-Stationnaire.
+- **Cointégration Engle-Granger vs Gold** : $ADF_{\text{résidus}} = -1.09 \gg -3.34 \implies$ ❌ **Non Cointégré**.
+- **Verdict** : Le $t$-statistique $+3.72$ était un artefact pur de tendance non-stationnaire partagée (Granger-Newbold 1974). Réévalué à **0 signal**.
+
+### C. Microstructure Spike (Crash 1000 / Boom 1000 H4)
+- 6 features affichant $p_{\text{brut}} \in [0.021, 0.033]$ sont éliminées par le filtre de fausses découvertes Benjamini-Hochberg ($N = 216$).
+
+---
+
+## 3. Décisions d'Architecture et Conclusion du Projet
+
+1. **Clôture et Réfutation Intégrale de la Tâche 2 (0 / 216 Features Validées)** :
+   - **0 alpha statistique** n'a été découvert sur l'ensemble de l'espace de recherche (HF M1, IF H4/D1, Technique, Macro FRED, Microstructure Spike et Positionnement COT/ETF).
+2. **Consolidation Scientifique des Rejets du Système Aegis Quant OS** :
+   - **High-Frequency M1** : Réfuté par la microstructure et le péage d'exécution (ADR 0025, 0027, 0028).
+   - **Intermediate-Frequency H4/D1** : Réfuté par l'absence de pouvoir prédictif post-correction des fausses découvertes et de stationnarité (ADR 0029, 0030).

@@ -2,7 +2,7 @@
 
 - **Statut** : REJETÉ (à haute fréquence M1/M5)
 - **Date** : 2026-08-06
-- **Contexte technique** : `scripts/build_gold_macro_dataset.py`, `scripts/run_macro_feature_research.py`, `data/market_data/xauusd_macro.parquet`, `docs/measures/sig-02/features_gold_macro.json`
+- **Contexte technique** : `scripts/build_gold_macro_dataset.py`, `scripts/run_macro_feature_research.py`, `data/market_data/xauusd_macro.parquet`, `docs/archive/sig-02/features_gold_macro.json`
 - **Dépend de** : ADR 0025 (rejet des features techniques simples), ADR 0026 (intégration FRED DFII10 via OpenBB)
 - **Résout** : Étape 1 de la trajectoire GOLD-MACRO
 

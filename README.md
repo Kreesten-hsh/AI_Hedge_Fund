@@ -23,7 +23,7 @@
 
 1. **Architecture Hexagonale & DDD** : Couche Domaine isolée de toute dépendance tierce, garantissant l'absence de fuite d'infrastructure.
 2. **Garde-Fous d'Exécution & Péage (Execution Budget Gates)** :
-   - Mesure exacte du péage d'exécution ($1.859\text{ bps}$ sur Deriv / $11.6\text{ bps}$ sur Gold / $10.0\text{ bps}$ sur Crypto Spot).
+   - Mesure exacte du péage d'exécution ($1.859\text{ bps}$ sur Deriv / Or et $10.0\text{ bps}$ sur Crypto Spot).
    - Validation stricte par horizon $H$ (ADR 0021).
 3. **Multi-Agent Council avec Veto de Liquidité/Exécution (ADR 0028)** :
    - Moteur d'agrégation de votes multi-agents.
@@ -83,6 +83,4 @@
 
 ## 🎯 PROCHAINE ÉTAPES DE RECHERCHE
 
-À la suite de la réfutation intégrale du trading directionnel univarié (ADR 0031), la trajectoire s'oriente vers des structures sans prédiction directionnelle :
-1. **Arbitrage Delta-Neutre de Funding Rate (Crypto Spot vs Perpetual)**.
-2. **Statistical Arbitrage / Pairs Trading Cointégré**.
+Prochaine direction en cours d'arbitrage — voir discussion stratégique.

@@ -33,8 +33,8 @@ Si $\max(Score_{BUY}, Score_{SELL}) < (0.5 + adjustment)$, le trade est annulé.
 
 Un budget strict de latence est imposé (par défaut 20 ms pour l'évaluation complète CPU-only du conseil). Si l'évaluation dépasse ce budget, un warning d'audit est levé pour éviter que le pipeline de décision ne soit bloqué.
 
-## 5. Mécanisme de Veto d'Exécution et de Liquidité (ADR 0028)
+## 5. Mécanisme de Veto d'Exécution et de Liquidité (`orchestrator.py`)
 
-Afin d'éviter tout trade non rentable sur des signaux valides mais pénalisés par le spread et le coût de transaction, le conseil intègre un droit de veto absolu :
-- **Agent Liquidity / Execution** : Si le mouvement moyen prédit à l'horizon $H$ est inférieur au péage de transaction amorti ($Péage = 1.859\text{ bps}$ sur Deriv / $11.6\text{ bps}$ sur Gold), l'agent émet un veto impératif `VETO_EXECUTION`.
-- **Règle d'Absolutisme** : Le veto de l'Agent Liquidity court-circuite le score d'agrégation $Score_{BUY}/Score_{SELL}$ et annule immédiatement l'ordre, quel que soit l'accord des autres membres du Conseil.
+Afin de protéger le capital contre l'exécution d'ordres en conditions de marché dégradées (spread excessif, latence élevée ou liquidité insuffisante), l'Orchestrateur vérifie les votes des agents de sécurité :
+- **Déclenchement du Veto Hard** : Si `LiquidityAgent` ou `ExecutionAgent` émet un vote `WAIT` avec une confiance $\ge 0.8$, un veto impératif est immédiatement levé (`veto_reason = "Veto triggered by {agent_name} (confidence={confidence})"`) ;
+- **Court-circuitage d'Agrégation** : Le veto court-circuite le score d'agrégation `Score_BUY / Score_SELL`, force le vote final à `final_vote = "WAIT"` et réinitialise le multiplicateur de position à `size_multiplier = 0.0`.

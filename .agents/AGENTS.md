@@ -55,6 +55,17 @@ Le projet avance uniquement lorsqu'une hypothèse est validée ou rejetée avec 
 
 ---
 
+## Constitution Technique (Engineering Rules)
+
+1. **Règle 1 - Isolement du Domaine (Clean Architecture)** : Aucun accès direct au Broker depuis la couche Domaine (`domain/`). Toutes les interactions passent par la couche Infrastructure via des Ports/Adaptateurs.
+2. **Règle 2 - Sécurisation du Chemin Critique** : Aucun LLM dans le chemin critique d'exécution des ordres temps réel. Les LLM opèrent en asynchrone hors de la boucle déterministe.
+3. **Règle 3 - Justification des Dépendances & Vendoring** : Toute nouvelle dépendance ou tout code amont vendoré doit porter une justification formelle et sa licence exacte dans `docs/refont/BUILD_VS_REUSE.md`.
+4. **Règle 4 - Validation par les Tests Effectifs** : Tout composant doit posséder une suite de tests unitaires exécutables qui valident le comportement réel (les mocks à `passed=True` ou tests non exécutés comptent comme absence de test).
+5. **Règle 5 - Documentation-Driven Development Verified** : Toute affirmation d'état dans `docs/` doit citer un `fichier:ligne` vérifiable ou porter un marqueur d'audit mesurable.
+6. **Règle 6 - Traçabilité Totale des Décisions** : Chaque cycle d'évaluation ou trade doit être traçable via un hash de commit `git_version` et un hash de données `data_hash`.
+
+---
+
 ## Règle finale
 À partir de maintenant, chaque demande de développement devra répondre à trois questions avant d'être implémentée :
 1. Est-ce sur la roadmap du sprint actuel ?

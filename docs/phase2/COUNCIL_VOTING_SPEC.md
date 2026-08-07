@@ -1,6 +1,6 @@
 # Multi-Agent Council - Voting Specification
 
-Ce document décrit la mathématique d'agrégation et de résolution des conflits pour l'AI-05.
+Ce document décrit la mathématique d'agrégation, la résolution des conflits et les droits de veto de l'AI-05.
 
 ## 1. VoteAggregator
 
@@ -31,4 +31,10 @@ Si $\max(Score_{BUY}, Score_{SELL}) < (0.5 + adjustment)$, le trade est annulé.
 
 ## 4. Latency Budget Guard
 
-Un budget strict de latence est imposé (par défaut 20 ms pour l'évaluation complète CPU-only du conseil). Si l'évaluation dépasse ce budget, un warning d'audit est levé pour éviter que le pipeline HFT ne soit bloqué.
+Un budget strict de latence est imposé (par défaut 20 ms pour l'évaluation complète CPU-only du conseil). Si l'évaluation dépasse ce budget, un warning d'audit est levé pour éviter que le pipeline de décision ne soit bloqué.
+
+## 5. Mécanisme de Veto d'Exécution et de Liquidité (ADR 0028)
+
+Afin d'éviter tout trade non rentable sur des signaux valides mais pénalisés par le spread et le coût de transaction, le conseil intègre un droit de veto absolu :
+- **Agent Liquidity / Execution** : Si le mouvement moyen prédit à l'horizon $H$ est inférieur au péage de transaction amorti ($Péage = 1.859\text{ bps}$ sur Deriv / $11.6\text{ bps}$ sur Gold), l'agent émet un veto impératif `VETO_EXECUTION`.
+- **Règle d'Absolutisme** : Le veto de l'Agent Liquidity court-circuite le score d'agrégation $Score_{BUY}/Score_{SELL}$ et annule immédiatement l'ordre, quel que soit l'accord des autres membres du Conseil.

@@ -25,9 +25,9 @@
 2. **Garde-Fous d'Exécution & Péage (Execution Budget Gates)** :
    - Mesure exacte du péage d'exécution ($1.859\text{ bps}$ sur Deriv / Or et $10.0\text{ bps}$ sur Crypto Spot).
    - Validation stricte par horizon $H$ (ADR 0021).
-3. **Multi-Agent Council avec Veto de Liquidité/Exécution (ADR 0028)** :
-   - Moteur d'agrégation de votes multi-agents.
-   - Veto impératif `VETO_EXECUTION` émis par l'Agent de Liquidité si le mouvement attendu ne couvre pas le péage d'exécution.
+3. **Multi-Agent Council avec Veto de Liquidité/Exécution (`orchestrator.py`)** :
+   - Moteur d'agrégation de votes multi-agents avec pondération dynamique.
+   - Veto impératif émis dès que `LiquidityAgent` ou `ExecutionAgent` vote `WAIT` avec une confiance $\ge 0.8$, réinitialisant la taille de position à zéro.
 4. **Integration des Frameworks Open-Source (Matrice `BUILD_VS_REUSE.md`)** :
    - Connecteurs pour `VectorBT`, `Microsoft Qlib`, `Freqtrade` et `pandas-ta-classic`.
 5. **Jeux de Données Validés & Audités** :

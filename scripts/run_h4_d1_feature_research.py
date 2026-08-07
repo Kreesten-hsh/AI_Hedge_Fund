@@ -1,4 +1,4 @@
-"""Script d'analyse et de recherche de features sur H4 et D1 (TÂCHE 2).
+"""Script d'analyse et de recherche de features sur H4 et D1 (TÂCHE 2 COMPLÈTE).
 
 Calcule la significativité statistique (t-stat Newey-West avec correction d'overlap, Spearman IC)
 avec CORRECTION RIGOUREUSE POUR TESTS MULTIPLES (Bonferroni & Benjamini-Hochberg FDR q=0.05).
@@ -6,7 +6,7 @@ avec CORRECTION RIGOUREUSE POUR TESTS MULTIPLES (Bonferroni & Benjamini-Hochberg
 Secteurs évalués (Ségrégation Stricte) :
 1. Gold (XAUUSD - Dukascopy 11.6 ans) sur D1 (H=1d, H=5d) et H4 (H=1b, H=6b) :
    - Groupe A : Features Techniques (25 features)
-   - Groupe B : Features Macro / Positionnement (6 features)
+   - Groupe B : Features Macro / Positionnement FRED (10 features : Taux Réel DFII10, Dollar Index DXY, CBOE Gold Volatility GVZ, Courbe 10Y-2Y, Incertitude Économique EPU)
 2. Synthétiques (Crash 1000 & Boom 1000 - Deriv H4 natif ~365j) sur H4 UNIQUEMENT (H=1b, H=6b) :
    - Features Microstructure / Processus de Spike (15 features)
 """
@@ -15,9 +15,12 @@ from __future__ import annotations
 
 import asyncio
 import glob
-import os
+import io
 import logging
+import os
+import subprocess
 from datetime import datetime, timezone
+
 import numpy as np
 import pandas as pd
 from scipy import stats
@@ -56,19 +59,34 @@ async def fetch_deriv_candles(symbol: str, granularity: int) -> pd.DataFrame:
     return df.sort_values("timestamp").reset_index(drop=True)
 
 
-def download_fred_series(series_id: str) -> pd.DataFrame:
-    url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    try:
-        res = requests.get(url, headers=headers, timeout=10)
-        if res.status_code == 200:
-            df = pd.read_csv(pd.io.common.StringIO(res.text))
-            df["date"] = pd.to_datetime(df["DATE"]).dt.date
-            df[series_id] = pd.to_numeric(df[series_id], errors="coerce")
-            return df.dropna(subset=[series_id]).sort_values("date").reset_index(drop=True)
-    except Exception:
-        pass
-    return pd.DataFrame()
+def download_fred_macro_series() -> dict[str, pd.Series]:
+    """Télécharge les séries Macro/Positionnement FRED via curl sans lookahead bias."""
+    series_ids = {
+        "dfii10": "DFII10",         # Taux réel US 10 ans
+        "dxy": "DTWEXBGS",          # Dollar Index FRED
+        "gvz": "GVZCLS",            # CBOE Gold Volatility Index
+        "t10y2y": "T10Y2Y",         # Courbe des taux 10Y-2Y
+        "epu": "USEPUINDXD",        # Economic Policy Uncertainty Index
+    }
+    result = {}
+    for name, s_id in series_ids.items():
+        cmd = f'curl -s -L "https://fred.stlouisfed.org/graph/fredgraph.csv?id={s_id}"'
+        try:
+            out = subprocess.check_output(cmd, shell=True).decode("utf-8")
+            df = pd.read_csv(io.StringIO(out))
+            date_col = df.columns[0]
+            val_col = df.columns[1]
+            df["date"] = pd.to_datetime(df[date_col], errors="coerce", utc=True)
+            df["val"] = pd.to_numeric(df[val_col], errors="coerce")
+            df = df.dropna(subset=["date", "val"]).sort_values("date").reset_index(drop=True)
+
+            s = pd.Series(df["val"].values, index=df["date"], name=name)
+            s = s[~s.index.duplicated(keep="last")]
+            result[name] = s
+            logger.info(f"FRED Series {name} ({s_id}) chargée : {len(s)} observations.")
+        except Exception as e:
+            logger.error(f"Erreur téléchargement FRED {s_id} : {e}")
+    return result
 
 
 def build_technical_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -121,6 +139,36 @@ def build_technical_features(df: pd.DataFrame) -> pd.DataFrame:
     # Range / Candle
     res["feat_high_low_ratio"] = (h - l) / (c + 1e-9)
     res["feat_close_open_ratio"] = (c - o) / (o + 1e-9)
+
+    return res
+
+
+def merge_macro_features(df: pd.DataFrame, fred_dict: dict[str, pd.Series]) -> pd.DataFrame:
+    """Alignement causale stricte des features Macro/Positionnement (shift(1) pour pas de lookahead)."""
+    res = df.copy()
+    if "timestamp" not in res.columns:
+        return res
+
+    res_ts = pd.to_datetime(res["timestamp"], utc=True)
+    
+    for name, series in fred_dict.items():
+        if series.empty:
+            continue
+        # Décalage de 1 jour pour garantir la publication préalable
+        s_lagged = series.shift(1)
+
+        # Merge par date / reindex ffill
+        # Création d'une série alignée sur res_ts
+        aligned = pd.Series(index=res_ts, dtype=float)
+        
+        # Mapper la date du jour sur la série macro
+        dates_only = res_ts.dt.floor("D")
+        aligned_vals = dates_only.map(s_lagged.to_dict())
+        aligned_vals = aligned_vals.ffill().bfill()
+        
+        res[f"feat_macro_{name}_level"] = aligned_vals.values
+        res[f"feat_macro_{name}_change_1d"] = pd.Series(aligned_vals.values).diff(1).values
+        res[f"feat_macro_{name}_change_5d"] = pd.Series(aligned_vals.values).diff(5).values
 
     return res
 
@@ -258,7 +306,6 @@ def apply_benjamini_hochberg(all_results: list[dict], alpha_q: float = 0.05) -> 
 
     for rank_idx, item in enumerate(sorted_res, start=1):
         p_raw = item["p_raw"]
-        # Seuil critique BH = (i / M) * q
         bh_critical = (rank_idx / M) * alpha_q
         p_adjusted = min(1.0, p_raw * (M / rank_idx))
 
@@ -272,14 +319,25 @@ def apply_benjamini_hochberg(all_results: list[dict], alpha_q: float = 0.05) -> 
 
 
 def main() -> None:
-    logger.info("=== TÂCHE 2 : RECHERCHE DE FEATURES H4 / D1 AVEC CORRECTION TESTS MULTIPLES ===")
+    logger.info("=== TÂCHE 2 COMPLÈTE : RECHERCHE DE FEATURES H4 / D1 AVEC GROUPE B MACRO/POSITIONNEMENT ET CORRECTION MULTI-TESTS ===")
 
-    # 1. CHARGEMENT ET CONSTRUCTION DES FEATURES
+    # 1. CHARGEMENT SÉRIES MACRO FRED (GROUPE B)
+    logger.info("Téléchargement des séries Macro FRED (Groupe B)...")
+    fred_series = download_fred_macro_series()
+
+    # 2. CHARGEMENT ET CONSTRUCTION DES FEATURES GOLD & SYNTHÉTIQUES
     logger.info("Traitement Gold Dukascopy D1 & H4...")
-    gold_d1 = build_technical_features(load_dukascopy_csv("data/raw_dukascopy/*d1*.csv"))
-    gold_h4 = build_technical_features(load_dukascopy_csv("data/raw_dukascopy/*h4*.csv"))
+    gold_d1_raw = load_dukascopy_csv("data/raw_dukascopy/*d1*.csv")
+    gold_h4_raw = load_dukascopy_csv("data/raw_dukascopy/*h4*.csv")
 
-    gold_feat_cols = [c for c in gold_d1.columns if c.startswith("feat_")]
+    gold_d1 = merge_macro_features(build_technical_features(gold_d1_raw), fred_series)
+    gold_h4 = merge_macro_features(build_technical_features(gold_h4_raw), fred_series)
+
+    gold_tech_cols = [c for c in gold_d1.columns if c.startswith("feat_") and not c.startswith("feat_macro_")]
+    gold_macro_cols = [c for c in gold_d1.columns if c.startswith("feat_macro_")]
+
+    logger.info(f"Gold Features Techniques (Groupe A) : {len(gold_tech_cols)}")
+    logger.info(f"Gold Features Macro/Positionnement (Groupe B) : {len(gold_macro_cols)}")
 
     logger.info("Traitement Synthétiques Deriv H4...")
     crash_h4 = build_spike_microstructure_features(asyncio.run(fetch_deriv_candles("CRASH1000", 14400)))
@@ -287,27 +345,31 @@ def main() -> None:
 
     synth_feat_cols = [c for c in crash_h4.columns if c.startswith("feat_")]
 
-    # 2. EXECUTION DES TESTS STATISTIQUES
+    # 3. EXECUTION DES TESTS STATISTIQUES
     logger.info("Calcul des t-stats Newey-West et IC Spearman...")
-    res_gold_d1 = run_feature_search_for_dataset(gold_d1, gold_feat_cols, [1, 5])
-    res_gold_h4 = run_feature_search_for_dataset(gold_h4, gold_feat_cols, [1, 6])
+    res_gold_d1_tech = run_feature_search_for_dataset(gold_d1, gold_tech_cols, [1, 5])
+    res_gold_d1_macro = run_feature_search_for_dataset(gold_d1, gold_macro_cols, [1, 5])
+
+    res_gold_h4_tech = run_feature_search_for_dataset(gold_h4, gold_tech_cols, [1, 6])
+    res_gold_h4_macro = run_feature_search_for_dataset(gold_h4, gold_macro_cols, [1, 6])
+
     res_crash_h4 = run_feature_search_for_dataset(crash_h4, synth_feat_cols, [1, 6])
     res_boom_h4 = run_feature_search_for_dataset(boom_h4, synth_feat_cols, [1, 6])
 
-    # Compte total des tests
-    total_tests = len(res_gold_d1) + len(res_gold_h4) + len(res_crash_h4) + len(res_boom_h4)
+    all_experiments = []
+    for r in res_gold_d1_tech: r["asset"] = "Gold"; r["tf"] = "D1"; r["group"] = "Technique (A)"; all_experiments.append(r)
+    for r in res_gold_d1_macro: r["asset"] = "Gold"; r["tf"] = "D1"; r["group"] = "Macro/Positionnement (B)"; all_experiments.append(r)
+    for r in res_gold_h4_tech: r["asset"] = "Gold"; r["tf"] = "H4"; r["group"] = "Technique (A)"; all_experiments.append(r)
+    for r in res_gold_h4_macro: r["asset"] = "Gold"; r["tf"] = "H4"; r["group"] = "Macro/Positionnement (B)"; all_experiments.append(r)
+    for r in res_crash_h4: r["asset"] = "Crash 1000"; r["tf"] = "H4"; r["group"] = "Microstructure Spike"; all_experiments.append(r)
+    for r in res_boom_h4: r["asset"] = "Boom 1000"; r["tf"] = "H4"; r["group"] = "Microstructure Spike"; all_experiments.append(r)
+
+    total_tests = len(all_experiments)
     bonferroni_threshold_p = 0.05 / total_tests
     bonferroni_threshold_t = stats.norm.ppf(1 - bonferroni_threshold_p / 2)
 
     logger.info(f"Nombre Total de Tests Indépendants Exécutés : N_tests = {total_tests}")
     logger.info(f"Seuil de Bonferroni ajusté : alpha_bonf = {bonferroni_threshold_p:.6f} (|t| >= {bonferroni_threshold_t:.3f})")
-
-    # Application Benjamini-Hochberg globale
-    all_experiments = []
-    for r in res_gold_d1: r["asset"] = "Gold"; r["tf"] = "D1"; r["group"] = "Technique"; all_experiments.append(r)
-    for r in res_gold_h4: r["asset"] = "Gold"; r["tf"] = "H4"; r["group"] = "Technique"; all_experiments.append(r)
-    for r in res_crash_h4: r["asset"] = "Crash 1000"; r["tf"] = "H4"; r["group"] = "Microstructure Spike"; all_experiments.append(r)
-    for r in res_boom_h4: r["asset"] = "Boom 1000"; r["tf"] = "H4"; r["group"] = "Microstructure Spike"; all_experiments.append(r)
 
     evaluated_all = apply_benjamini_hochberg(all_experiments, alpha_q=0.05)
 
@@ -316,7 +378,7 @@ def main() -> None:
     sig_raw = [x for x in evaluated_all if x["abs_t"] >= 2.0]
 
     print("\n=========================================================================================")
-    print(f"      SYNTHÈSE DE LA RECHERCHE DE FEATURES H4 / D1 (N_tests = {total_tests})")
+    print(f"      SYNTHÈSE EXHAUSTIVE DE LA RECHERCHE DE FEATURES H4 / D1 (N_tests = {total_tests})")
     print("=========================================================================================\n")
     print(f"1. Nombre total de paires (Feature x Horizon x Actif) évaluées : {total_tests}")
     print(f"2. Nombre de paires significatives brutes (|t| >= 2.0 sans ajustement) : {len(sig_raw)} ({len(sig_raw)/total_tests*100:.1f}%)")
@@ -326,14 +388,14 @@ def main() -> None:
     print("TOP 10 DES MEILLEURES FEATURES ÉVALUÉES (Classées par t-stat Newey-West) :")
     top10 = sorted(evaluated_all, key=lambda x: x["abs_t"], reverse=True)[:10]
     for x in top10:
-        print(f"  [{x['asset']} {x['tf']} H={x['horizon']}] {x['feature']:25s} | IC = {x['ic']:+6.3f} | t-stat = {x['t_stat']:+6.2f} | p_raw = {x['p_raw']:.4f} | BH q=0.05 = {'✅ SIG' if x['sig_bh_q05'] else '❌ NOT SIG'}")
+        print(f"  [{x['asset']} {x['tf']} H={x['horizon']}] ({x['group']}) {x['feature']:30s} | IC = {x['ic']:+6.3f} | t-stat = {x['t_stat']:+6.2f} | p_raw = {x['p_raw']:.4f} | BH q=0.05 = {'✅ SIG' if x['sig_bh_q05'] else '❌ NOT SIG'}")
 
     # GENERATION DU RAPPORT MARKDOWN
     os.makedirs("docs/research", exist_ok=True)
     with open(OUTPUT_DOC, "w", encoding="utf-8") as f:
-        f.write("# RAPPORT QUANTITATIF DE RECHERCHE DE FEATURES H4 / D1 (TÂCHE 2)\n\n")
+        f.write("# RAPPORT QUANTITATIF EXHAUSTIF DE RECHERCHE DE FEATURES H4 / D1 (TÂCHE 2)\n\n")
         f.write(f"**Date d'exécution** : {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}\n")
-        f.write(f"**Nombre Total d'Hypothèses Évaluées ($N_{{\\text{{tests}}}}$)** : **`{total_tests}`**\n")
+        f.write(f"**Nombre Total d'Hypothèses Évaluées ($N_{{\\text{{tests}}}}$)** : **`{total_tests}`** (Groupes A Technique, B Macro/Positionnement et Microstructure Spike)\n")
         f.write(f"**Seuil Brut non-ajusté ($|t| \\ge 2.0$)** : $\\alpha = 0.05$ (~5% de faux positifs attendus par pur hasard)\n")
         f.write(f"**Seuil de Bonferroni Ajusté** : $\\alpha_{{\\text{{bonf}}}} = {bonferroni_threshold_p:.6f}$ ($|t| \\ge {bonferroni_threshold_t:.3f}$)\n")
         f.write(f"**Seuil Benjamini-Hochberg (FDR $q = 0.05$)** : Taux de fausses découvertes contrôlé à 5%\n\n")
@@ -345,14 +407,21 @@ def main() -> None:
         f.write(f"| **Benjamini-Hochberg (FDR $q=0.05$)** | $p \\le \\text{{BH}}_{{\\text{{crit}}}}$ | **{len(sig_bh)} / {total_tests}** | **{len(sig_bh)/total_tests*100:.1f}%** |\n")
         f.write(f"| **Bonferroni (Conservateur)** | $|t| \\ge {bonferroni_threshold_t:.2f}$ ($p \\le {bonferroni_threshold_p:.6f}$) | **{len(sig_bonf)} / {total_tests}** | **{len(sig_bonf)/total_tests*100:.1f}%** |\n\n")
 
-        f.write("## 2. Résultats Détaillés par Actif (Ségrégation Stricte)\n\n")
+        f.write("## 2. Résultats Détaillés par Actif et Groupe de Features (Ségrégation Stricte)\n\n")
 
         f.write("### 2.1 Gold (`XAUUSD` - Dukascopy 11.6 ans)\n\n")
-        f.write("#### A. Features Techniques (D1 et H4) :\n\n")
+        f.write("#### Groupe A : Features Techniques (D1 et H4) :\n\n")
         f.write("| Timeframe | Horizon H | Feature Name | Spearman IC | t-stat Newey-West | p-valeur brute | BH (q=0.05) | Bonferroni |\n")
         f.write("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n")
-        gold_items = [x for x in evaluated_all if x["asset"] == "Gold"]
-        for x in sorted(gold_items, key=lambda k: k["abs_t"], reverse=True):
+        gold_tech_items = [x for x in evaluated_all if x["asset"] == "Gold" and x["group"] == "Technique (A)"]
+        for x in sorted(gold_tech_items, key=lambda k: k["abs_t"], reverse=True):
+            f.write(f"| {x['tf']} | H={x['horizon']} | `{x['feature']}` | {x['ic']:+.4f} | **{x['t_stat']:+.2f}** | {x['p_raw']:.4f} | {'✅ SIG' if x['sig_bh_q05'] else '❌ NOT SIG'} | {'✅ SIG' if x['sig_bonferroni'] else '❌ NOT SIG'} |\n")
+
+        f.write("\n\n#### Groupe B : Features Macro / Positionnement FRED (D1 et H4) :\n\n")
+        f.write("| Timeframe | Horizon H | Feature Name | Spearman IC | t-stat Newey-West | p-valeur brute | BH (q=0.05) | Bonferroni |\n")
+        f.write("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n")
+        gold_macro_items = [x for x in evaluated_all if x["asset"] == "Gold" and x["group"] == "Macro/Positionnement (B)"]
+        for x in sorted(gold_macro_items, key=lambda k: k["abs_t"], reverse=True):
             f.write(f"| {x['tf']} | H={x['horizon']} | `{x['feature']}` | {x['ic']:+.4f} | **{x['t_stat']:+.2f}** | {x['p_raw']:.4f} | {'✅ SIG' if x['sig_bh_q05'] else '❌ NOT SIG'} | {'✅ SIG' if x['sig_bonferroni'] else '❌ NOT SIG'} |\n")
 
         f.write("\n\n### 2.2 Synthétiques (`CRASH1000` & `BOOM1000` - Deriv Natif H4 ~365j)\n\n")
@@ -367,7 +436,7 @@ def main() -> None:
         if len(sig_bh) > 0:
             f.write(f"**{len(sig_bh)} features sont officiellement validées après correction pour tests multiples (Benjamini-Hochberg FDR q=0.05)**.\n")
         else:
-            f.write("**0 feature ne franchit la correction pour tests multiples Benjamini-Hochberg / Bonferroni avec significativité à q=0.05**.\n")
+            f.write(f"**0 feature sur les {total_tests} hypothèses évaluées (Technique, Macro/Positionnement FRED et Microstructure Spike) ne franchit la correction pour tests multiples Benjamini-Hochberg / Bonferroni avec significativité à q=0.05**.\n")
 
     logger.info(f"Rapport enregistré dans {OUTPUT_DOC}")
 

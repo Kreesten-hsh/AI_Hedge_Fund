@@ -1,56 +1,64 @@
-# RAPPORT QUANTITATIF DE RECHERCHE DE FEATURES DE POSITIONNEMENT (CFTC COT & GLD ETF)
+# RAPPORT QUANTITATIF DE RECHERCHE DE FEATURES DE POSITIONNEMENT COT (CODE 088691)
 
-**Nombre Total d'Hypothèses Évaluées dans la Famille ($N_{\text{pos}}$)** : **`28`**
-**Seuil de Bonferroni Ajusté sur la Famille** : $\alpha = 0.001786$ ($|t| \ge 3.124$)
-**Seuil Benjamini-Hochberg (FDR $q=0.05$)** : Taux de fausses découvertes contrôlé à 5%
+## 1. Preuve du Filtre CFTC COT Exact et Alignement Causal
 
-## 1. Audit de Stationnarité ADF Préalable (Règle ADR 0030)
+- **Colonne CFTC Utilisée** : `CFTC Contract Market Code`
+- **Code Contrat Filtré** : **`088691`** (COMEX Gold 100 oz Standard)
+- **Historique Traité** : **`604` semaines** de 2015 à 2026
+- **Unicité des Semaines** : **`604` dates uniques** (Doublons : `0`)
+- **Lag Causal Strict** : Mardi position $\rightarrow$ Utilisable Lundi 00:00 UTC (lag 6 jours / 3 jours ouvrés, ZERO lookahead bias)
 
-| Feature Name | Description | Nature de la Série | ADF t-stat | Engle-Granger ADF | Statut Économétrique |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `feat_pos_cot_net_spec_level` | Positionnement / Flux | I(0) Stationnaire | **-11.68** | +0.00 | **N/A** |
-| `feat_pos_cot_net_spec_change_1w` | Positionnement / Flux | I(0) Stationnaire | **-42.91** | +0.00 | **N/A** |
-| `feat_pos_cot_net_spec_change_4w` | Positionnement / Flux | I(0) Stationnaire | **-19.73** | +0.00 | **N/A** |
-| `feat_pos_cot_spec_ratio_level` | Positionnement / Flux | I(0) Stationnaire | **-13.84** | +0.00 | **N/A** |
-| `feat_pos_gld_volume_level` | Positionnement / Flux | I(0) Stationnaire | **-11.66** | +0.00 | **N/A** |
-| `feat_pos_gld_volume_change_1d` | Positionnement / Flux | I(0) Stationnaire | **-34.74** | +0.00 | **N/A** |
-| `feat_pos_gld_volume_change_5d` | Positionnement / Flux | I(0) Stationnaire | **-38.62** | +0.00 | **N/A** |
+### Échantillon de 3 lignes brutes après filtrage :
+
+| Date Mardi | Net Speculative Position | NonCommercial Long | NonCommercial Short |
+| :--- | :--- | :--- | :--- |
+| 2015-01-06 | **122,178** | 187,705 | 65,527 |
+| 2015-01-13 | **130,226** | 192,959 | 62,733 |
+| 2015-01-20 | **162,455** | 223,257 | 60,802 |
 
 
-## 2. Résultats des Tests de Significativité (Newey-West & Spearman IC)
+## 2. Documentation Transparente du Blocage Technique GLD ETF Holdings
+
+> [!WARNING]
+> **BLOCAGE TECHNIQUE RÉEL DU TÉLÉCHARGEMENT SPDR ET WORLD GOLD COUNCIL**
+> 1. **SPDR Official CSV URL** (`https://www.spdrgoldshares.com/assets/dynamic/GLD/GLD_US_archive_EN.csv`) : Le serveur SPDR renvoie un document **`%PDF-1.5`** déguisé avec une extension `.csv`, bloquant le parsing des avoirs physiques.
+> 2. **World Gold Council URL** (`https://www.gold.org/download/file/21037/ETF_Flows_...xlsx`) : Le serveur renvoie une page HTML **`Access denied`** (Cloudflare anti-bot blocking).
+> 3. Conformément aux consignes, aucun volume de trading n'a été utilisé comme substitut silencieux. Les flux d'avoirs physiques GLD sont documentés comme **non accessibles sans session navigateur interactive**.
+
+## 3. Audit de Stationnarité ADF Préalable (Règle ADR 0030)
+
+| Feature Name | Description | Nature de la Série | ADF t-stat | Statut Économétrique |
+| :--- | :--- | :--- | :--- | :--- |
+| `feat_pos_cot_net_spec_level` | Positionnement COT 088691 | I(0) Stationnaire | **-3.13** | ✅ Valide pour test |
+| `feat_pos_cot_net_spec_change_1w` | Positionnement COT 088691 | I(0) Stationnaire | **-24.91** | ✅ Valide pour test |
+| `feat_pos_cot_net_spec_change_4w` | Positionnement COT 088691 | I(0) Stationnaire | **-10.25** | ✅ Valide pour test |
+| `feat_pos_cot_spec_ratio_level` | Positionnement COT 088691 | I(0) Stationnaire | **-3.22** | ✅ Valide pour test |
+
+
+## 4. Résultats des Tests de Significativité ($N=16$ Paires)
+
+**Seuil de Bonferroni Ajusté sur la Famille COT ($N=16$)** : $\alpha = 0.003125$ ($|t| \ge 2.955$)
 
 | Timeframe | Horizon H | Feature Name | Spearman IC | t-stat Newey-West | p-valeur brute | BH (q=0.05) | Bonferroni |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| D1 | H=1 | `feat_pos_cot_spec_ratio_level` | +0.0009 | **-0.48** | 0.6333 | ❌ NOT SIG | ❌ NOT SIG |
-| D1 | H=5 | `feat_pos_cot_spec_ratio_level` | -0.0149 | **-0.44** | 0.6634 | ❌ NOT SIG | ❌ NOT SIG |
-| H4 | H=1 | `feat_pos_cot_spec_ratio_level` | +0.0112 | **-0.40** | 0.6860 | ❌ NOT SIG | ❌ NOT SIG |
-| H4 | H=6 | `feat_pos_cot_spec_ratio_level` | +0.0035 | **-0.37** | 0.7118 | ❌ NOT SIG | ❌ NOT SIG |
-| D1 | H=5 | `feat_pos_cot_net_spec_level` | -0.0061 | **-0.00** | 0.9970 | ❌ NOT SIG | ❌ NOT SIG |
-| D1 | H=5 | `feat_pos_cot_net_spec_change_1w` | +0.0124 | **+0.00** | 0.9978 | ❌ NOT SIG | ❌ NOT SIG |
-| H4 | H=6 | `feat_pos_cot_net_spec_change_1w` | -0.0137 | **+0.00** | 0.9991 | ❌ NOT SIG | ❌ NOT SIG |
-| D1 | H=1 | `feat_pos_cot_net_spec_change_1w` | -0.0112 | **+0.00** | 0.9992 | ❌ NOT SIG | ❌ NOT SIG |
-| D1 | H=1 | `feat_pos_cot_net_spec_level` | +0.0060 | **-0.00** | 0.9994 | ❌ NOT SIG | ❌ NOT SIG |
-| H4 | H=6 | `feat_pos_cot_net_spec_level` | +0.0068 | **-0.00** | 0.9995 | ❌ NOT SIG | ❌ NOT SIG |
-| D1 | H=5 | `feat_pos_cot_net_spec_change_4w` | -0.0233 | **+0.00** | 0.9997 | ❌ NOT SIG | ❌ NOT SIG |
-| H4 | H=1 | `feat_pos_cot_net_spec_change_1w` | -0.0010 | **+0.00** | 0.9998 | ❌ NOT SIG | ❌ NOT SIG |
-| D1 | H=1 | `feat_pos_cot_net_spec_change_4w` | -0.0207 | **-0.00** | 0.9998 | ❌ NOT SIG | ❌ NOT SIG |
-| H4 | H=6 | `feat_pos_cot_net_spec_change_4w` | -0.0171 | **-0.00** | 0.9999 | ❌ NOT SIG | ❌ NOT SIG |
-| H4 | H=1 | `feat_pos_cot_net_spec_level` | +0.0114 | **-0.00** | 0.9999 | ❌ NOT SIG | ❌ NOT SIG |
-| H4 | H=1 | `feat_pos_cot_net_spec_change_4w` | +0.0003 | **+0.00** | 1.0000 | ❌ NOT SIG | ❌ NOT SIG |
-| D1 | H=5 | `feat_pos_gld_volume_change_1d` | -0.0183 | **-0.00** | 1.0000 | ❌ NOT SIG | ❌ NOT SIG |
-| H4 | H=6 | `feat_pos_gld_volume_change_1d` | -0.0141 | **-0.00** | 1.0000 | ❌ NOT SIG | ❌ NOT SIG |
-| H4 | H=6 | `feat_pos_gld_volume_change_5d` | +0.0052 | **-0.00** | 1.0000 | ❌ NOT SIG | ❌ NOT SIG |
-| D1 | H=5 | `feat_pos_gld_volume_level` | +0.0260 | **+0.00** | 1.0000 | ❌ NOT SIG | ❌ NOT SIG |
-| D1 | H=1 | `feat_pos_gld_volume_change_5d` | +0.0138 | **-0.00** | 1.0000 | ❌ NOT SIG | ❌ NOT SIG |
-| D1 | H=1 | `feat_pos_gld_volume_change_1d` | -0.0114 | **-0.00** | 1.0000 | ❌ NOT SIG | ❌ NOT SIG |
-| D1 | H=5 | `feat_pos_gld_volume_change_5d` | -0.0041 | **-0.00** | 1.0000 | ❌ NOT SIG | ❌ NOT SIG |
-| H4 | H=1 | `feat_pos_gld_volume_change_1d` | -0.0074 | **-0.00** | 1.0000 | ❌ NOT SIG | ❌ NOT SIG |
-| H4 | H=1 | `feat_pos_gld_volume_change_5d` | +0.0026 | **-0.00** | 1.0000 | ❌ NOT SIG | ❌ NOT SIG |
-| H4 | H=6 | `feat_pos_gld_volume_level` | +0.0172 | **-0.00** | 1.0000 | ❌ NOT SIG | ❌ NOT SIG |
-| H4 | H=1 | `feat_pos_gld_volume_level` | +0.0132 | **-0.00** | 1.0000 | ❌ NOT SIG | ❌ NOT SIG |
-| D1 | H=1 | `feat_pos_gld_volume_level` | +0.0166 | **-0.00** | 1.0000 | ❌ NOT SIG | ❌ NOT SIG |
+| D1 | H=5 | `feat_pos_cot_spec_ratio_level` | +0.0198 | **+0.13** | 0.8941 | ❌ NOT SIG | ❌ NOT SIG |
+| H4 | H=6 | `feat_pos_cot_spec_ratio_level` | +0.0218 | **-0.11** | 0.9105 | ❌ NOT SIG | ❌ NOT SIG |
+| D1 | H=1 | `feat_pos_cot_spec_ratio_level` | +0.0214 | **-0.05** | 0.9625 | ❌ NOT SIG | ❌ NOT SIG |
+| H4 | H=1 | `feat_pos_cot_spec_ratio_level` | +0.0207 | **-0.04** | 0.9710 | ❌ NOT SIG | ❌ NOT SIG |
+| D1 | H=5 | `feat_pos_cot_net_spec_change_4w` | -0.0436 | **-0.02** | 0.9857 | ❌ NOT SIG | ❌ NOT SIG |
+| H4 | H=6 | `feat_pos_cot_net_spec_change_1w` | -0.0310 | **-0.02** | 0.9880 | ❌ NOT SIG | ❌ NOT SIG |
+| D1 | H=1 | `feat_pos_cot_net_spec_change_1w` | -0.0269 | **-0.01** | 0.9895 | ❌ NOT SIG | ❌ NOT SIG |
+| D1 | H=5 | `feat_pos_cot_net_spec_change_1w` | -0.0093 | **-0.01** | 0.9923 | ❌ NOT SIG | ❌ NOT SIG |
+| H4 | H=6 | `feat_pos_cot_net_spec_change_4w` | -0.0312 | **-0.01** | 0.9957 | ❌ NOT SIG | ❌ NOT SIG |
+| D1 | H=1 | `feat_pos_cot_net_spec_change_4w` | -0.0347 | **-0.01** | 0.9958 | ❌ NOT SIG | ❌ NOT SIG |
+| H4 | H=1 | `feat_pos_cot_net_spec_change_1w` | -0.0076 | **-0.00** | 0.9980 | ❌ NOT SIG | ❌ NOT SIG |
+| D1 | H=5 | `feat_pos_cot_net_spec_level` | +0.0225 | **+0.00** | 0.9990 | ❌ NOT SIG | ❌ NOT SIG |
+| H4 | H=1 | `feat_pos_cot_net_spec_change_4w` | -0.0092 | **-0.00** | 0.9993 | ❌ NOT SIG | ❌ NOT SIG |
+| H4 | H=6 | `feat_pos_cot_net_spec_level` | +0.0213 | **-0.00** | 0.9998 | ❌ NOT SIG | ❌ NOT SIG |
+| D1 | H=1 | `feat_pos_cot_net_spec_level` | +0.0221 | **-0.00** | 0.9999 | ❌ NOT SIG | ❌ NOT SIG |
+| H4 | H=1 | `feat_pos_cot_net_spec_level` | +0.0200 | **-0.00** | 1.0000 | ❌ NOT SIG | ❌ NOT SIG |
 
 
-## 3. CONCLUSION ET DÉCISION FINAL DE LA DERNIÈRE PISTE NON FALSIFIÉE
+## 5. CONCLUSION ET VERDICT DU POSITIONNEMENT COT
 
-**0 feature de positionnement (CFTC COT Net Speculative Position & GLD ETF Flows) ne franchit la correction pour tests multiples Benjamini-Hochberg FDR q=0.05 ou le filtre de régression fallacieuse**.
+**0 feature sur les 16 paires évaluées dans la famille CFTC COT 088691 ne franchit la correction pour tests multiples Benjamini-Hochberg FDR q=0.05**.

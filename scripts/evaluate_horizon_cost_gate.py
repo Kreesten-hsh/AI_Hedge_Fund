@@ -224,8 +224,26 @@ def main() -> None:
             f.write(f"| H={H}b ({H*4}h) | **{m['mean_move_bps']:.2f} bps** | **{m['coverage_ratio']:.1f}x** | {m['pct_profitable']:.1f}% | {m['n_eff_global']:.1f} | **{m['n_eff_holdout']:.1f}** | **{st}** |\n")
 
         f.write("\n\n## 3. CONCLUSION ET VALIDATION DU GATE DE TRADABILITÉ\n\n")
-        f.write("1. **Gold (XAUUSD)** : Validé avec succès sur D1 et H4. À l'horizon D1 (H=1d), le mouvement moyen est de **85.3 bps**, couvrant **45.9 fois le péage d'exécution** (1.859 bps). Le sous-échantillon Holdout de 30% fournit **$n_{\text{eff, holdout}} = 253.6$ fenêtres quotidiennes indépendantes**, garantissant une puissance de validation robuste.\n")
-        f.write("2. **Crash 1000 / Boom 1000** : Validés sur H4 ($n_{\text{eff, holdout}} \approx 110 \text{ fenêtres}$, couverture $>100\times$). Sur D1, la couverture est excellente (>200x) mais l'échantillon court de 365 jours laisse $n_{\text{eff, holdout}} = 22.1$ fenêtres (sous le seuil de 30). L'horizon H4 est retenu comme prioritaire pour les synthétiques.\n")
+        f.write(
+            f"1. **Gold (XAUUSD)** : Validé avec succès sur D1 et H4. À l'horizon D1 (H=1d), "
+            f"le mouvement moyen est de **{gold_d1_res[1]['mean_move_bps']:.2f} bps**, "
+            f"couvrant **{gold_d1_res[1]['coverage_ratio']:.1f} fois le péage d'exécution** ({COST_ROUND_TRIP_BPS} bps). "
+            f"Le sous-échantillon Holdout de 30% fournit **$n_{{eff, holdout}} = {gold_d1_res[1]['n_eff_holdout']:.1f}$ "
+            f"fenêtres quotidiennes indépendantes**, garantissant une puissance de validation robuste.\n"
+        )
+        f.write(
+            f"2. **Crash 1000 / Boom 1000** : Validés sur H4 à H=6b ({crash_h4_res[6]['mean_move_bps']:.2f} bps, "
+            f"couverture {crash_h4_res[6]['coverage_ratio']:.1f}x, $n_{{eff, holdout}} = {crash_h4_res[6]['n_eff_holdout']:.1f}$ fenêtres). "
+            f"Sur D1, l'échantillon natif court de 365 jours laisse $n_{{eff, holdout}} = {crash_d1_res[5]['n_eff_holdout']:.1f}$ "
+            f"fenêtres à H=5d (sous le seuil minimal de 30). L'horizon H4 est donc retenu à titre exclusif pour les synthétiques.\n\n"
+        )
+        f.write(
+            "> [!CAUTION]\n"
+            "> **RAPPEL METHODOLOGIQUE (PASS != EDGE)**\n"
+            "> La validation du Gate de Tradabilité signifie uniquement que le mouvement moyen des prix dépasse suffisamment "
+            "le coût d'exécution (1.859 bps) pour justifier l'initiation d'une recherche d'alpha. "
+            "Ce résultat NE CONSTITUE EN AUCUN CAS une preuve d'alpha ni un signal prédictif (comme H5 l'était sur M1 avant le rejet de significativité 0/25 dans GOLD-01).\n"
+        )
 
     logger.info(f"Rapport enregistré dans {OUTPUT_DOC}")
 

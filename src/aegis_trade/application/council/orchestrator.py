@@ -29,9 +29,13 @@ class MultiAgentCouncil:
         
         # 1. Collect votes
         votes = []
+        veto_reason = None
         for agent in self.agents:
             vote = agent.vote(context)
             votes.append(vote)
+            # Check for hard veto from safety agents (LiquidityAgent, ExecutionAgent)
+            if agent.name in ("LiquidityAgent", "ExecutionAgent") and vote.vote == "WAIT" and vote.confidence >= 0.8:
+                veto_reason = f"Veto triggered by {agent.name} (confidence={vote.confidence:.2f})"
             
         # 2. Aggregation
         # Extract weights from RL Policy (AI-04), default to empty if no policy
@@ -42,7 +46,12 @@ class MultiAgentCouncil:
         # 3. Conflict Resolution
         size_multiplier, disagreement = self.conflict_resolver.resolve(buy_score, sell_score)
         
-        # 4. Apply RL Policy Risk Multipliers (AI-04)
+        # 4. Apply Hard Veto from LiquidityAgent / ExecutionAgent if present
+        if veto_reason:
+            final_vote = "WAIT"
+            size_multiplier = 0.0
+        
+        # 5. Apply RL Policy Risk Multipliers (AI-04)
         if policy:
             size_multiplier *= policy.risk_multiplier
             # If confidence is below the RL-adjusted threshold, we veto
@@ -50,12 +59,16 @@ class MultiAgentCouncil:
             adjusted_threshold = base_threshold + policy.confidence_threshold_adjustment
             if agg_confidence < adjusted_threshold:
                 final_vote = "WAIT"
+                if not veto_reason:
+                    veto_reason = "Confidence too low for RL Policy"
                 
         # If conflict resolver completely aborted
         if size_multiplier <= 0.0:
             final_vote = "WAIT"
+            if not veto_reason:
+                veto_reason = "Confidence too low or high disagreement"
 
-        # 5. Latency Guard
+        # 6. Latency Guard
         elapsed_ms = (time.perf_counter() - start_time) * 1000
         if elapsed_ms > self.max_latency_ms:
             logger.warning(f"Council Latency Guard breached: {elapsed_ms:.2f}ms > {self.max_latency_ms}ms")
@@ -65,7 +78,7 @@ class MultiAgentCouncil:
             aggregated_confidence=agg_confidence,
             position_size_multiplier=size_multiplier,
             votes=votes,
-            veto_reason=None if final_vote != "WAIT" else "Confidence too low or high disagreement",
+            veto_reason=veto_reason if final_vote == "WAIT" else None,
             disagreement_level=disagreement
         )
 

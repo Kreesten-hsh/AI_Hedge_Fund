@@ -22,9 +22,39 @@ class FeatureScore:
     ic_std: float
     ic_information_ratio: float
     stability: float
-    
+
     # Optional aggregate score combining IC, IR, and Stability
     final_score: float = 0.0
+
+    # --- Significance block ---
+    # `ic_mean` alone cannot answer "is there a signal": it is an average of
+    # rolling windows with no dispersion budget attached. The fields below carry
+    # that budget. They default to a null, non-significant state so that any
+    # producer which does not compute them cannot silently claim significance.
+
+    # Full-sample rank correlation between the feature at t and the forward
+    # return at t+N. This is the headline IC; `ic_mean` is a rolling average and
+    # will differ from it.
+    ic_spearman: float = 0.0
+
+    # Aligned, non-null (feature, forward return) pairs actually used.
+    observations: int = 0
+
+    # Observations corrected for forward-return overlap. Consecutive rows share
+    # N-1 bars of their forward window, so the raw count overstates the
+    # information available by roughly a factor N. Set to `observations // N`:
+    # the size of the largest non-overlapping subsample.
+    effective_observations: int = 0
+
+    # Student t of `ic_spearman` against zero, computed on
+    # `effective_observations`, not on `observations`.
+    ic_t_stat: float = 0.0
+
+    # |t| > 2 on the effective sample. Not a discovery claim: with dozens of
+    # features tested at once, individual thresholds do not control the family
+    # -wise error rate. A feature that fails this is out; one that passes it is
+    # merely still in the running.
+    is_significant: bool = False
 
 @dataclass(frozen=True)
 class ResearchMetadata:

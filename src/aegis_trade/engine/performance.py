@@ -3,6 +3,76 @@ import numpy as np
 from dataclasses import dataclass, asdict
 from typing import Dict, Any
 
+TRADING_DAYS_PER_YEAR = 252
+
+
+def annualization_factor(periods_per_year: int) -> float:
+    """
+    Facteur d'annualisation d'un écart-type de rendements périodiques : sqrt(periods_per_year).
+
+    AUTORITÉ UNIQUE du Lot 3 pour l'annualisation. Tout appelant qui annualise une volatilité,
+    un Sharpe ou un Sortino passe par ici — `engine/portfolio.py` inclus.
+
+    Le facteur ne dépend QUE de la périodicité des rendements, jamais de la longueur de la
+    fenêtre observée. `engine/portfolio.py` appliquait auparavant `sqrt(n_periods)` sous 30 jours
+    pour « éviter une extrapolation absurde à 252 » : l'intention était juste, la mise en œuvre
+    introduisait une discontinuité mesurée d'un facteur **2.95x sur une seule barre de plus**
+    (29 jours -> facteur 5.385, 30 jours -> 15.875). Un Sharpe qui triple parce que la fenêtre
+    gagne un jour n'est pas comparable d'une exécution à l'autre.
+
+    Le bruit d'estimation d'un Sharpe sur fenêtre courte est réel, mais c'est une réserve
+    statistique — elle se traite par un seuil de significativité (le `NaN` sous 2 trades de
+    `Portfolio.metrics`), pas en déformant le facteur.
+    """
+    if periods_per_year <= 0:
+        raise ValueError(f"periods_per_year must be strictly positive, got {periods_per_year}")
+    return float(np.sqrt(periods_per_year))
+
+
+def annualized_volatility(returns: pd.Series, periods_per_year: int = TRADING_DAYS_PER_YEAR) -> float:
+    """Écart-type des rendements périodiques, annualisé."""
+    return float(returns.std() * annualization_factor(periods_per_year))
+
+
+def annualized_sharpe(
+    returns: pd.Series,
+    risk_free_rate: float = 0.0,
+    periods_per_year: int = TRADING_DAYS_PER_YEAR,
+) -> float:
+    """
+    Sharpe annualisé. Renvoie 0.0 sur variance nulle — pas d'infini sur un capital immobile.
+
+    Le taux sans risque est déprorratisé (`rf / periods_per_year`) pour être homogène aux
+    rendements périodiques avant soustraction.
+    """
+    std = returns.std()
+    if std == 0 or pd.isna(std):
+        return 0.0
+    excess = returns - (risk_free_rate / periods_per_year)
+    return float((excess.mean() / std) * annualization_factor(periods_per_year))
+
+
+def annualized_sortino(
+    returns: pd.Series,
+    risk_free_rate: float = 0.0,
+    periods_per_year: int = TRADING_DAYS_PER_YEAR,
+) -> float:
+    """
+    Sortino annualisé : excès de rendement rapporté au seul écart-type des rendements négatifs.
+
+    Renvoie `NaN` quand la baisse n'est pas estimable (moins de 2 rendements négatifs, ou
+    dispersion nulle). Un `inf` serait un ratio « parfait » construit sur une absence de données.
+    """
+    downside = returns[returns < 0]
+    if len(downside) < 2:
+        return float("nan")
+    downside_std = downside.std() * annualization_factor(periods_per_year)
+    if downside_std == 0 or pd.isna(downside_std):
+        return float("nan")
+    excess = returns - (risk_free_rate / periods_per_year)
+    return float((excess.mean() * periods_per_year) / downside_std)
+
+
 @dataclass
 class TearsheetReport:
     """
@@ -66,17 +136,10 @@ class PerformanceEngine:
         else:
             cagr = np.nan
             
-        # Volatility
-        ann_vol = returns.std() * np.sqrt(self.ppy)
-        
-        # Sharpe
-        excess_returns = returns - (self.rf / self.ppy)
-        sharpe = (excess_returns.mean() / returns.std()) * np.sqrt(self.ppy) if returns.std() != 0 else 0.0
-        
-        # Sortino
-        downside_returns = returns[returns < 0]
-        downside_std = downside_returns.std() * np.sqrt(self.ppy)
-        sortino = (excess_returns.mean() * self.ppy) / downside_std if (len(downside_returns) > 1 and downside_std != 0) else np.nan
+        # Volatility / Sharpe / Sortino — délégués aux helpers d'autorité de ce module.
+        ann_vol = annualized_volatility(returns, self.ppy)
+        sharpe = annualized_sharpe(returns, self.rf, self.ppy)
+        sortino = annualized_sortino(returns, self.rf, self.ppy)
 
         # Drawdown
         cum_ret = (1 + returns).cumprod()

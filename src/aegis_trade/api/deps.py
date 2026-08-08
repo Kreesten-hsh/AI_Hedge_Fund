@@ -1,4 +1,3 @@
-from fastapi import Depends
 import os
 from decimal import Decimal
 from aegis_trade.application.monitoring.engine import MonitoringEngine
@@ -8,13 +7,14 @@ from aegis_trade.infrastructure.paper.deriv_gateway import DerivGateway, LiveDer
 from aegis_trade.engine.global_risk import GlobalRiskManager
 from aegis_trade.engine.portfolio import PortfolioEngine
 from aegis_trade.application.council.orchestrator import MultiAgentCouncil
+from aegis_trade.application.council.feature_provider import RollingFeatureProvider
+from aegis_trade.infrastructure.features.technical_extractor import TechnicalFeatureExtractor
 from aegis_trade.infrastructure.rl.policy_checkpoint_store import PolicyCheckpointStore
 
 from aegis_trade.infrastructure.reasoning.knowledge_repo import InMemoryKnowledgeRepository
 from aegis_trade.application.reasoning.llm_adapter import MockReasoner
 from aegis_trade.application.reasoning.knowledge import KnowledgeGenerator
 from aegis_trade.application.reasoning.clustering import DBSCANClusterEngine
-from aegis_trade.application.reasoning.analyzer import ExperienceAnalyzer
 
 from aegis_trade.application.council.agents.trend_agent import TrendAgent
 from aegis_trade.application.council.agents.momentum_agent import MomentumAgent
@@ -40,6 +40,15 @@ def get_orchestrator() -> PaperTradingOrchestrator:
         token = os.environ.get("DERIV_DEMO_TOKEN", "dummy")
         
         if env == "LIVE":
+            # Le consentement vient de l'opérateur, jamais du code. Sans la
+            # variable explicite, on refuse de construire une passerelle réelle
+            # plutôt que de démarrer en pensant être en démo.
+            consent = os.environ.get("AEGIS_I_UNDERSTAND_THIS_IS_REAL_MONEY", "").strip().lower()
+            if consent not in ("1", "true", "yes"):
+                raise RuntimeError(
+                    "AEGIS_ENV=LIVE exige AEGIS_I_UNDERSTAND_THIS_IS_REAL_MONEY=true. "
+                    "Aucune passerelle argent réel n'est construite sans ce consentement explicite."
+                )
             gateway = LiveDerivGateway(token=token, i_understand_this_is_real_money=True)
         else:
             gateway = DerivGateway(token=token)
@@ -53,8 +62,7 @@ def get_orchestrator() -> PaperTradingOrchestrator:
         reasoner = MockReasoner()
         knowledge_generator = KnowledgeGenerator(reasoner=reasoner)
         cluster_engine = DBSCANClusterEngine()
-        experience_analyzer = ExperienceAnalyzer()
-        
+
         # Make these globally available via monitoring engine for post-trade async processing
         _monitoring_engine.knowledge_repo = knowledge_repo
         _monitoring_engine.knowledge_generator = knowledge_generator
@@ -80,7 +88,13 @@ def get_orchestrator() -> PaperTradingOrchestrator:
             portfolio_engine=portfolio,
             event_publisher=lambda e: None,
             council=council,
-            policy_store=policy_store
+            policy_store=policy_store,
+            # Une seule implémentation d'indicateurs alimente le Council :
+            # recalculer un RSI ailleurs ferait voter les agents sur des
+            # valeurs différentes de celles journalisées avec l'ordre.
+            feature_provider=RollingFeatureProvider(
+                extractor=TechnicalFeatureExtractor()
+            )
         )
     return _orchestrator
 

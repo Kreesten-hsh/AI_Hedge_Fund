@@ -5,20 +5,39 @@ from unittest.mock import Mock, call
 
 from aegis_trade.domain import Symbol, AssetClass
 from aegis_trade.engine.events import OrderEvent, OrderAction, FillEvent
+from aegis_trade.engine.global_risk import GlobalRiskManager
+from aegis_trade.engine.portfolio import Portfolio
+from aegis_trade.engine.risk_gate import OrderRejectedByRisk, RiskGate
 from aegis_trade.providers.vnpy_adapter import VnpyAdapter, EVENT_TRADE, Direction, OrderType, Exchange, Offset
+
+XAUUSD = Symbol("XAUUSD", AssetClass.COMMODITIES)
+
+
+def _risk_gate(price: Decimal = Decimal("2000.0"), **limits) -> RiskGate:
+    """Vrai GlobalRiskManager sur un vrai portefeuille : le test prouve le
+    comportement du système, pas celui d'un mock complaisant."""
+    portfolio = Portfolio(initial_capital=1_000_000.0)
+    portfolio._latest_prices[XAUUSD] = price
+    return RiskGate(GlobalRiskManager(**limits), portfolio)
+
 
 class TestVnpyAdapter(unittest.TestCase):
     def setUp(self):
         self.mock_main_engine = Mock()
         self.mock_event_engine = Mock()
-        self.adapter = VnpyAdapter(main_engine=self.mock_main_engine, event_engine=self.mock_event_engine, gateway_name="TEST")
+        self.adapter = VnpyAdapter(
+            main_engine=self.mock_main_engine,
+            event_engine=self.mock_event_engine,
+            gateway_name="TEST",
+            risk_gate=_risk_gate(),
+        )
         
     def test_adapter_registers_event(self):
         self.mock_event_engine.register.assert_called_once_with(EVENT_TRADE, self.adapter.on_trade)
 
     def test_send_order_translates_correctly(self):
         ts = datetime.now(timezone.utc)
-        sym = Symbol("XAUUSD", AssetClass.COMMODITIES)
+        sym = XAUUSD
         
         # Aegis DTO
         aegis_order = OrderEvent(

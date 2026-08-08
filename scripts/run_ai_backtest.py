@@ -12,39 +12,37 @@ from aegis_trade.engine.feed import HistoricalReplayFeed
 from aegis_trade.strategies.ema_cross import EmaCrossStrategy
 from aegis_trade.engine.ai_decision_engine import AiDecisionEngine
 
-from aegis_trade.infrastructure.llm.settings import LLMSettings
-from aegis_trade.infrastructure.llm.factory import LLMProviderFactory
-from aegis_trade.agents.registry import AgentRegistry
-from aegis_trade.agents.runner import AgentRunner
-from aegis_trade.agents.council import CouncilOrchestrator
-from aegis_trade.agents.synthesizer import CouncilSynthesizer
-from aegis_trade.agents.regime_analyst import RegimeAnalyst
-from aegis_trade.agents.macro_analyst import MacroAnalyst
-from aegis_trade.agents.risk_analyst import RiskAnalyst
+from aegis_trade.application.council.orchestrator import MultiAgentCouncil
+from aegis_trade.application.council.agents.trend_agent import TrendAgent
+from aegis_trade.application.council.agents.momentum_agent import MomentumAgent
+from aegis_trade.application.council.agents.volatility_agent import VolatilityAgent
+from aegis_trade.application.council.agents.liquidity_agent import LiquidityAgent
+from aegis_trade.application.council.agents.pattern_agent import PatternAgent
+from aegis_trade.application.council.agents.news_agent import NewsAgent
+from aegis_trade.application.council.agents.execution_agent import ExecutionAgent
+from aegis_trade.application.council.agents.portfolio_agent import PortfolioAgent
 
 from aegis_trade.dataset.repository import StorageDatasetRepository
 from aegis_trade.dataset.resolver import DatasetResolver
 
 def main():
     print("==========================================================")
-    print("AEGIS QUANT OS - AI-DRIVEN BACKTEST")
+    print("AEGIS QUANT OS - DETERMINISTIC COUNCIL BACKTEST")
     print("==========================================================")
 
-    # 1. Setup Agents & Cache
-    print("[1] Initializing AI Agents and Cache...")
-    settings = LLMSettings.get_instance()
-    provider = LLMProviderFactory.create(settings)
-    
-    # Enable cache to avoid calling LLM hundreds of times
-    runner = AgentRunner(provider=provider, use_cache=True)
-    synthesizer = CouncilSynthesizer(provider=provider)
-    
-    registry = AgentRegistry()
-    registry.register(RegimeAnalyst())
-    registry.register(MacroAnalyst())
-    registry.register(RiskAnalyst())
-    
-    orchestrator = CouncilOrchestrator(registry, runner, synthesizer)
+    # 1. Setup MultiAgentCouncil (8 Deterministic Agents)
+    print("[1] Initializing MultiAgentCouncil...")
+    agents = [
+        TrendAgent(),
+        MomentumAgent(),
+        VolatilityAgent(),
+        LiquidityAgent(),
+        PatternAgent(),
+        NewsAgent(),
+        ExecutionAgent(),
+        PortfolioAgent(),
+    ]
+    council = MultiAgentCouncil(agents=agents)
 
     # 2. Setup Data Feed
     print("[2] Loading Market Data...")
@@ -64,7 +62,7 @@ def main():
     strategy = EmaCrossStrategy(symbol="XAUUSD", fast_period=20, slow_period=50)
     broker = SimulatedBroker(commission_per_unit=Decimal("0.0001"))
     portfolio = Portfolio(initial_capital=Decimal("100000"))
-    ai_engine = AiDecisionEngine(orchestrator=orchestrator, risk_pct=Decimal("0.10"), window_size=5)
+    ai_engine = AiDecisionEngine(council=council, risk_pct=Decimal("0.10"), window_size=5)
 
     engine = TradingEngine(
         feed=feed,
@@ -75,7 +73,7 @@ def main():
     )
 
     # 4. Execute Backtest
-    print("\n[4] Running Backtest... (Signals will trigger cached LLM calls)")
+    print("\n[4] Running Backtest...")
     t0 = time.time()
     report = engine.run()
     elapsed = time.time() - t0

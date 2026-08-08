@@ -1,5 +1,8 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
 from decimal import Decimal
-from typing import Dict, Tuple, TYPE_CHECKING, Optional
+from typing import Protocol, Tuple, TYPE_CHECKING, Optional, runtime_checkable
 
 from aegis_trade.domain import Symbol
 from aegis_trade.engine.events import OrderEvent, OrderAction
@@ -7,6 +10,41 @@ from aegis_trade.engine.events import OrderEvent, OrderAction
 if TYPE_CHECKING:
     from aegis_trade.engine.portfolio import Portfolio
 from aegis_trade.domain.capital import CapitalAllocation
+
+
+@runtime_checkable
+class LiquidatableGateway(Protocol):
+    """Ce dont le kill switch a besoin d'une passerelle, et rien de plus.
+
+    Protocole structurel plutôt qu'import de `IPaperBroker` : `engine/` ne doit
+    pas dépendre de `application/`. Toute passerelle exposant ces deux
+    coroutines est utilisable, live ou papier.
+    """
+
+    async def cancel_all_orders(self) -> int: ...
+
+    async def close_all_positions(self) -> int: ...
+
+
+@dataclass(frozen=True)
+class HaltReport:
+    """Résultat d'un déclenchement du kill switch.
+
+    `cancel_error` / `close_error` sont renseignés quand la passerelle a échoué :
+    le halt reste actif dans tous les cas — un broker injoignable ne doit jamais
+    laisser le système repartir en trading.
+    """
+
+    status: str = "HALTED"
+    orders_cancelled: int = 0
+    positions_closed: int = 0
+    cancel_error: Optional[str] = None
+    close_error: Optional[str] = None
+
+    @property
+    def fully_liquidated(self) -> bool:
+        return self.cancel_error is None and self.close_error is None
+
 
 class GlobalRiskManager:
     """
@@ -26,26 +64,42 @@ class GlobalRiskManager:
         self.capital_allocation = capital_allocation
         self._emergency_halt_active = False
 
-    async def emergency_halt(self, gateway: 'IPaperBroker' = None) -> dict:
+    async def emergency_halt(
+        self, gateway: Optional[LiquidatableGateway] = None
+    ) -> HaltReport:
         """
         Activates the Kill Switch.
         Blocks all future orders, cancels pending orders, and closes open positions.
         """
         self._emergency_halt_active = True
-        result = {"status": "HALTED", "orders_cancelled": 0, "positions_closed": 0}
-        
-        if gateway:
-            try:
-                result["orders_cancelled"] = await gateway.cancel_all_orders()
-            except Exception as e:
-                result["cancel_error"] = str(e)
-                
-            try:
-                result["positions_closed"] = await gateway.close_all_positions()
-            except Exception as e:
-                result["close_error"] = str(e)
-                
-        return result
+
+        if gateway is None:
+            return HaltReport()
+
+        cancelled = 0
+        cancel_error: Optional[str] = None
+        try:
+            cancelled = await gateway.cancel_all_orders()
+        except Exception as exc:
+            cancel_error = str(exc)
+
+        closed = 0
+        close_error: Optional[str] = None
+        try:
+            closed = await gateway.close_all_positions()
+        except Exception as exc:
+            close_error = str(exc)
+
+        return HaltReport(
+            orders_cancelled=cancelled,
+            positions_closed=closed,
+            cancel_error=cancel_error,
+            close_error=close_error,
+        )
+
+    @property
+    def is_halted(self) -> bool:
+        return self._emergency_halt_active
 
     def validate_order(
         self,

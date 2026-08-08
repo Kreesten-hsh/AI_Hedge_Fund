@@ -148,6 +148,19 @@ class AccountEvent(EngineEvent):
         super().__post_init__()
 
 @dataclass(frozen=True)
+class MetricsEvent(EngineEvent):
+    """Snapshot périodique du portefeuille (equity, drawdown, expositions).
+
+    `EngineEventType.METRICS` existait sans porteur : la boucle de monitoring
+    calculait un snapshot puis le jetait faute d'événement pour le transporter.
+    """
+    metrics: dict[str, float]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, 'event_type', EngineEventType.METRICS)
+        super().__post_init__()
+
+@dataclass(frozen=True)
 class TradeEvent(EngineEvent):
     trade_id: str
     symbol: Symbol

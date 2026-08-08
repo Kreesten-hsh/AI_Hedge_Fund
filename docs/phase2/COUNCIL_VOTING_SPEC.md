@@ -1,6 +1,6 @@
 # Multi-Agent Council - Voting Specification
 
-Ce document décrit la mathématique d'agrégation et de résolution des conflits pour l'AI-05.
+Ce document décrit la mathématique d'agrégation, la résolution des conflits et les droits de veto de l'AI-05.
 
 ## 1. VoteAggregator
 
@@ -31,4 +31,10 @@ Si $\max(Score_{BUY}, Score_{SELL}) < (0.5 + adjustment)$, le trade est annulé.
 
 ## 4. Latency Budget Guard
 
-Un budget strict de latence est imposé (par défaut 20 ms pour l'évaluation complète CPU-only du conseil). Si l'évaluation dépasse ce budget, un warning d'audit est levé pour éviter que le pipeline HFT ne soit bloqué.
+Un budget strict de latence est imposé (par défaut 20 ms pour l'évaluation complète CPU-only du conseil). Si l'évaluation dépasse ce budget, un warning d'audit est levé pour éviter que le pipeline de décision ne soit bloqué.
+
+## 5. Mécanisme de Veto d'Exécution et de Liquidité (`orchestrator.py`)
+
+Afin de protéger le capital contre l'exécution d'ordres en conditions de marché dégradées (spread excessif, latence élevée ou liquidité insuffisante), l'Orchestrateur vérifie les votes des agents de sécurité :
+- **Déclenchement du Veto Hard** : Si `LiquidityAgent` ou `ExecutionAgent` émet un vote `WAIT` avec une confiance $\ge 0.8$, un veto impératif est immédiatement levé (`veto_reason = "Veto triggered by {agent_name} (confidence={confidence})"`) ;
+- **Court-circuitage d'Agrégation** : Le veto court-circuite le score d'agrégation `Score_BUY / Score_SELL`, force le vote final à `final_vote = "WAIT"` et réinitialise le multiplicateur de position à `size_multiplier = 0.0`.

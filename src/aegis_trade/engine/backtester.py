@@ -8,6 +8,7 @@ from aegis_trade.domain.strategy import IStrategy
 from aegis_trade.domain.execution import IBroker, OrderIntent, FillEvent
 from aegis_trade.domain.ports.position_sizer import IPositionSizer
 from aegis_trade.engine.performance import PerformanceEngine, TearsheetReport
+from aegis_trade.engine.portfolio import compute_realized_pnl
 from aegis_trade.engine.global_risk import GlobalRiskManager
 from aegis_trade.infrastructure.portfolio.fixed_fractional_sizer import FixedFractionalSizer
 from aegis_trade.infrastructure.risk.global_risk_adapter import GlobalRiskAdapter
@@ -179,11 +180,19 @@ class Backtester:
         # Realized PnL logic
         realized_pnl = 0.0
         if self.position > 0 and fill.direction < 0: # Closing a long
-            qty_closed = min(self.position, fill.quantity)
-            realized_pnl = (fill.fill_price - self.average_price) * qty_closed
+            realized_pnl = compute_realized_pnl(
+                entry_price=self.average_price,
+                exit_price=fill.fill_price,
+                quantity_closed=min(self.position, fill.quantity),
+                is_long=True,
+            )
         elif self.position < 0 and fill.direction > 0: # Closing a short
-            qty_closed = min(abs(self.position), fill.quantity)
-            realized_pnl = (self.average_price - fill.fill_price) * qty_closed
+            realized_pnl = compute_realized_pnl(
+                entry_price=self.average_price,
+                exit_price=fill.fill_price,
+                quantity_closed=min(abs(self.position), fill.quantity),
+                is_long=False,
+            )
             
         self.capital += realized_pnl
         self.capital -= fill.commission
@@ -204,10 +213,17 @@ class Backtester:
             
         self.position = new_position
         
+        # `PerformanceEngine` dérive win rate, profit factor et expectancy de
+        # cette colonne : elle doit être nette de frais, sinon le tearsheet
+        # compte gagnante une transaction que la commission rend perdante.
+        # C'est une grandeur distincte du PnL brut de l'autorité, pas une
+        # seconde implémentation de celle-ci.
+        net_pnl = realized_pnl - fill.commission
+
         # Record trade
         self.trades_history.append({
             'timestamp': fill.timestamp,
-            'pnl': realized_pnl - fill.commission, # Net PnL of the transaction
+            'pnl': net_pnl,
             'turnover': fill.quantity * fill.fill_price,
             'exposure': 1 if self.position != 0 else 0
         })

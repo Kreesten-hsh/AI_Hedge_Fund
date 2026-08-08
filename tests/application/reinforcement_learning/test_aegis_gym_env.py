@@ -3,8 +3,8 @@ Tests for Custom Aegis Env.
 """
 
 import numpy as np
-from src.aegis_trade.application.reinforcement_learning.aegis_gym_env import CustomAegisEnv
-from src.aegis_trade.application.reinforcement_learning.reward_calculator import RewardCalculator
+from aegis_trade.application.reinforcement_learning.aegis_gym_env import CustomAegisEnv
+from aegis_trade.application.reinforcement_learning.reward_calculator import RewardCalculator
 
 
 def test_env_initialization():

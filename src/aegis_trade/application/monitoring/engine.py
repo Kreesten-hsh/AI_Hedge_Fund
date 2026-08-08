@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from aegis_trade.engine.events import (
     EngineEvent, EngineEventType, OrderLifecycleEvent, PositionEvent, AccountEvent, TradeEvent
 )
+from aegis_trade.engine.portfolio import compute_equity, compute_realized_pnl
 from aegis_trade.application.monitoring.models import (
     PortfolioSnapshot, PositionSnapshot, RiskSnapshot, SystemSnapshot,
     PerformanceSnapshot, PaperTradingSnapshot, BrokerSnapshot, StrategySnapshot
@@ -97,7 +98,13 @@ class MonitoringEngine:
             ev: AccountEvent = event
             if ev.action == "balance_updated":
                 self.portfolio.cash = ev.amount
-                self.portfolio.equity = self.portfolio.cash + self.portfolio.total_unrealized_pnl
+                # Recalcul equity via l'autorité, pas via total_unrealized_pnl figé
+                positions_tuple = tuple(
+                    (pos.quantity, pos.current_price) for pos in self.positions.values()
+                )
+                self.portfolio.equity = compute_equity(
+                    cash=self.portfolio.cash, positions=positions_tuple
+                )
                 self.portfolio.timestamp = now
                 updated_topics.append(("portfolio", self.portfolio))
 
@@ -121,12 +128,24 @@ class MonitoringEngine:
             elif ev.action == "closed":
                 if symbol_name in self.positions:
                     pos = self.positions[symbol_name]
-                    # Calculate real PnL
-                    multiplier = Decimal(1) if pos.side == "LONG" else Decimal(-1)
-                    realized_pnl_amount = (ev.average_price - pos.entry_price) * pos.quantity * multiplier
-                    
-                    if pos.entry_price > 0 and pos.quantity > 0:
-                        realized_pnl_percent = (realized_pnl_amount / (pos.entry_price * pos.quantity)) * Decimal(100)
+                    # `PositionSnapshot.quantity` est signé (négatif pour un
+                    # SHORT). L'ancien calcul y appliquait en plus un
+                    # multiplicateur de direction : la double inversion rendait
+                    # le PnL de tout SHORT exactement opposé au bon, et le garde
+                    # `quantity > 0` mettait son pourcentage à zéro — donc tout
+                    # short gagnant partait en FAILURE dans la mémoire du
+                    # Council (`_run_reflection_pipeline`).
+                    quantity_closed = abs(pos.quantity)
+                    realized_pnl_amount = compute_realized_pnl(
+                        entry_price=pos.entry_price,
+                        exit_price=ev.average_price,
+                        quantity_closed=quantity_closed,
+                        is_long=pos.side == "LONG",
+                    )
+
+                    notional = pos.entry_price * quantity_closed
+                    if notional > 0:
+                        realized_pnl_percent = (realized_pnl_amount / notional) * Decimal(100)
                     else:
                         realized_pnl_percent = Decimal(0)
                         

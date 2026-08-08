@@ -27,13 +27,15 @@ dependencies = [
     "torch>=2.0.0",
     "finrl>=0.3.6",
     "einops>=0.8.2",
+    "openbb-fred>=1.0.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest",
     "pytest-cov",
-    "pytest-mock"
+    "pytest-mock",
+    "pytest-asyncio>=1.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -48,9 +50,21 @@ python_version = "3.11"
 strict = true
 warn_unreachable = true
 show_error_codes = true
+mypy_path = "src"
+explicit_package_bases = true
+
+# `deriv_api` est une dépendance optionnelle non installée : le gateway bascule
+# en mode stub quand l'import échoue (import local dans `connect()`). Sans cette
+# exception, `mypy --strict` signale un module introuvable pour un chemin de
+# code dont l'absence est justement le comportement nominal en démo.
+[[tool.mypy.overrides]]
+module = ["deriv_api.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
 
 [dependency-groups]
 dev = [

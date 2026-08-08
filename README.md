@@ -2,37 +2,50 @@
 
 ![Python Version](https://img.shields.io/badge/python-3.11-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Build](https://img.shields.io/badge/build-passing-brightgreen)
 ![Architecture](https://img.shields.io/badge/architecture-Clean%20%7C%20Hexagonal-orange)
+![Status](https://img.shields.io/badge/research-concluded%20(216%20hypotheses%20tested)-red)
 
-**Aegis Quant OS** est un système de trading quantitatif personnel (Operating System) piloté par Intelligence Artificielle. Il a pour vocation de centraliser l'ingestion de données de marché, de simuler et gérer un portefeuille, d'exécuter des stratégies via des brokers, et d'orchestrer un panel d'agents IA (AI Council) pour formuler des décisions de marché complexes.
+**Aegis Quant OS** est un système de trading quantitatif et d'évaluation d'hypothèses d'alpha d'inspiration institutionnelle. Le système sépare rigoureusement la logique de domaine, les moteurs de risque, les garde-fous d'exécution et les adapteurs d'infrastructure (LLMs, Open-Source ML, Moteurs de Backtest, Broker Gateways).
 
-Conçu avec les principes du **Domain-Driven Design (DDD)** et de la **Clean Architecture**, Aegis garantit une stricte séparation entre sa logique de trading, ses moteurs de risque, et ses fournisseurs d'infrastructure (LLMs, Bases de données, Brokers).
+---
 
-> ⚠️ **Note** : Aegis Quant OS est strictement un outil personnel. Il n'intègre aucune fonctionnalité SaaS, de gestion multi-utilisateur ou de facturation.
+## 📌 STATUT ACTUEL DE LA RECHERCHE (AOUT 2026)
 
-## 🚀 Fonctionnalités Principales
+> [!IMPORTANT]
+> **Rigueur Scientifique & Transparence Absolue (Règle Anti-Survente)** :
+> - **Hypothèses Évaluées** : **216 hypothèses** (Signaux M1/M5, Indicateurs Techniques univariés, Features Macro FRED DFII10/DXY, Microstructure Spike, Positionnement CFTC COT 088691, Trend-Following Crypto 24/7, ML Cross-Sectional Ranking).
+> - **Signaux Validés en Production** : **0 / 216 (0.0%)**.
+> - Tous les signaux directionnels univariés usuels sur séries de prix individuelles ont été formellement **réfutés** après déduction des péages d'exécution et correction des tests multiples FDR / Bonferroni (ADR 0025 à ADR 0031).
 
-- **Architecture Hexagonale & DDD** : Le domaine financier (Assets, Positions, Trades, Signaux) est isolé de toute dépendance tierce.
-- **AI Council** : Un orchestrateur multi-agents permettant d'interroger plusieurs LLMs simultanément (ex: Macro Analyst, Risk Analyst, Technical Analyst) et de synthétiser leurs rapports en une décision unique.
-- **LLM Abstraction & Decision Cache** : L'OS s'interface avec n'importe quel LLM via des *Adapters* (Ollama supporté nativement) et met en cache de façon déterministe les délibérations pour optimiser les performances (SHA-256).
-- **Risk-First Engine** : Contrôle absolu sur le capital avec limites d'exposition et vérifications globales avant toute exécution d'ordre.
-- **Event-Driven Bus** : Communication inter-composants asynchrone réduisant le couplage.
+---
 
-## 🛠️ Technologies et Frameworks
+## 🏛️ CE QUI EST OPÉRATIONNEL ET ROBUSTE
 
-- **Langage** : Python 3.11 (Requis)
-- **Configuration** : `PyYAML`
-- **Tests** : `pytest`, `unittest.mock`
-- **Providers Cibles** : `Ollama` (LLM), `OpenBB` (Data), `Qlib` (Machine Learning), `vn.py` (Broker Gateway)
+1. **Architecture Hexagonale & DDD** : Couche Domaine isolée de toute dépendance tierce, garantissant l'absence de fuite d'infrastructure.
+2. **Garde-Fous d'Exécution & Péage (Execution Budget Gates)** :
+   - Mesure exacte du péage d'exécution ($1.859\text{ bps}$ sur Deriv / Or et $10.0\text{ bps}$ sur Crypto Spot).
+   - Validation stricte par horizon $H$ (ADR 0021).
+3. **Multi-Agent Council avec Veto de Liquidité/Exécution (`orchestrator.py`)** :
+   - Moteur d'agrégation de votes multi-agents avec pondération dynamique.
+   - Veto impératif émis dès que `LiquidityAgent` ou `ExecutionAgent` vote `WAIT` avec une confiance $\ge 0.8$, réinitialisant la taille de position à zéro.
+4. **Integration des Frameworks Open-Source (Matrice `BUILD_VS_REUSE.md`)** :
+   - Connecteurs pour `VectorBT`, `Microsoft Qlib`, `Freqtrade` et `pandas-ta-classic`.
+5. **Jeux de Données Validés & Audités** :
+   - `XAUUSD` Dukascopy 11.6 ans (D1 et H4) à alignement causal strict.
+   - Données CFTC COT filtrées sur le code exact **`088691`** (Gold COMEX 100 oz Standard).
 
-## ⚙️ Prérequis Système
+---
 
-- **Python 3.11** (Strictement requis, les versions supérieures peuvent casser la compatibilité des bibliothèques quantitatives C-extensions).
-- **Ollama** (Recommandé en local pour l'exécution des modèles sans surcoût API).
-- Git.
+## 🛠️ TECHNOLOGIES ET FRAMEWORKS
 
-## 📦 Installation et Configuration
+- **Langage** : Python 3.11
+- **Architecture** : Clean Architecture / Ports & Adapters
+- **Frameworks Quantitatifs** : `vectorbt`, `pandas-ta-classic`, `scipy`, `numpy`, `pandas`, `lightgbm`
+- **Infrastructure LLM** : Ollama (Adapteur local déterministe avec cache SHA-256)
+
+---
+
+## ⚙️ INSTALLATION ET EXÉCUTION DES TESTS
 
 1. **Cloner le dépôt** :
    ```bash
@@ -41,89 +54,33 @@ Conçu avec les principes du **Domain-Driven Design (DDD)** et de la **Clean Arc
    ```
 
 2. **Créer et activer un environnement virtuel** :
-   - Sur Windows :
-     ```powershell
-     python -m venv .venv
-     .\.venv\Scripts\Activate.ps1
-     ```
-   - Sur macOS/Linux :
-     ```bash
-     python -m venv .venv
-     source .venv/bin/activate
-     ```
+   ```bash
+   python3.11 -m venv .venv
+   source .venv/bin/activate
+   ```
 
 3. **Installer les dépendances** :
    ```bash
-   pip install -r requirements.txt
-   ```
-   *(Assurez-vous que `PyYAML` et `pytest` font partie de vos dépendances).*
-
-4. **Configurer l'infrastructure LLM** :
-   Modifiez le fichier de configuration principal `config/llm.yaml` selon vos ressources (exemple avec un profil local) :
-   ```yaml
-   llm:
-     active_profile: "standard"
-     profiles:
-       standard:
-         provider: "ollama"
-         model: "llama3.1"
-         temperature: 0.1
-         timeout: 120
-         keep_alive: 0
+   pip install -e .
    ```
 
-5. **Lancer les tests** :
-   Vérifiez l'intégrité de l'environnement avec la suite complète de tests :
+4. **Exécuter la suite complète de tests** :
    ```bash
    pytest -v
    ```
 
-## 💻 Exemples d'Utilisation
+---
 
-### Lancement du AI Council (Prise de décision synthétique)
-Le script `run_council_consensus.py` illustre l'intégration de la Clean Architecture. Le `LLMProviderFactory` injecte le fournisseur de modèle configuré dans l'orchestrateur de l'IA.
+## 📂 STRUCTURE DU DÉPÔT ET DECISIONS (ADRs)
 
-```bash
-python scripts/run_council_consensus.py
-```
-*Le système instanciera les agents (Macro, Risque, Fondamental), passera le contexte du marché aux modèles, récupérera les rapports asynchrones, et formulera la décision via le Synthesizer.*
-
-### Backtest Simplifié (Ai Decision Engine)
-Évaluez des règles métiers simulées via le moteur de backtest :
-```bash
-python scripts/run_ai_backtest.py
-```
-
-## 🏗️ Structure du Projet
-
-L'arborescence respecte la ségrégation des Bounded Contexts :
-
-```
-AegisQuantOS/
-├── config/                  # Fichiers YAML de configuration de l'infrastructure
-├── docs/                    # Documentation officielle, ADRs, et Roadmaps
-├── prompts/                 # Prompts Markdown pour le paramétrage des Agents LLM
-├── scripts/                 # Points d'entrée pour lancer le système (Backtest, Live)
-├── src/aegis_trade/
-│   ├── agents/              # Orchestration des LLMs (Council, Runner, Analystes)
-│   ├── core/                # Bus d'événements et exceptions
-│   ├── dataset/             # Moteur de chargement des données (MarketBars)
-│   ├── domain/              # Objets de domaine (Trades, Positions)
-│   ├── engine/              # Logique métier (Portfolio, Global Risk, AI Decision)
-│   ├── infrastructure/      # Implémentations techniques (Cache, Logging, LLM Factory)
-│   ├── providers/           # Adaptateurs pour services externes (vn.py, Qlib, mt5)
-│   ├── strategies/          # Logiques algorithmiques pures
-│   └── utils/               # Outils transversaux
-└── tests/                   # Suite de tests unitaires (pytest)
-```
-
-## 📚 Documentation Additionnelle
-
-Aegis Quant OS est documenté exhaustivement pour sa maintenance à long terme. Consultez le répertoire `docs/` pour :
-- **[La Vision et l'Objectif du Système](docs/VISION.md)**
-- **[L'Architecture Globale et les Flux](docs/SYSTEM_ARCHITECTURE.md)**
-- **[L'Analyse des Écarts et la Feuille de Route](docs/PRODUCT_ROADMAP.md)**
-- **[Les Architecture Decision Records (ADRs)](docs/ADR/)**
+- **`src/aegis_trade/`** : Code source (Clean Architecture : `domain/`, `application/`, `infrastructure/`).
+- **`docs/ADR/`** : Registre complet des décisions d'architecture et de recherche (0001 à 0031).
+- **`docs/refont/BUILD_VS_REUSE.md`** : Matrice de réutilisation des frameworks Open-Source.
+- **`docs/research/`** : Rapports de recherche quantitatifs probants.
+- **`docs/archive/`** : Archives historiques et métadonnées brutes.
 
 ---
-*Aegis Quant OS — Risk First, Always.*
+
+## 🎯 PROCHAINE ÉTAPES DE RECHERCHE
+
+Prochaine direction en cours d'arbitrage — voir discussion stratégique.

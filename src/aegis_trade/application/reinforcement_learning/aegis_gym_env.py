@@ -8,7 +8,7 @@ from gymnasium import spaces
 import numpy as np
 from typing import Any, Dict, List, Tuple
 
-from src.aegis_trade.application.reinforcement_learning.reward_calculator import RewardCalculator
+from aegis_trade.application.reinforcement_learning.reward_calculator import RewardCalculator
 
 
 class CustomAegisEnv(gym.Env):

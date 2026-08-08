@@ -1,0 +1,56 @@
+{
+  "symbol": "BOOM1000",
+  "timeframe": "M1",
+  "horizon": 10,
+  "commission_rate": 5.315e-05,
+  "slippage_bps": 0.0,
+  "safety_margin": 1.0,
+  "round_trip_bps": 1.063,
+  "buy_threshold": 0.0001063,
+  "train_rows": 52500,
+  "test_rows": 22500,
+  "training_report": {
+    "status": "success",
+    "training_time_seconds": 7.825297117233276,
+    "samples": 52490,
+    "metrics": {
+      "rmse": 0.00077546317893693,
+      "mae": 0.0006041852175911056,
+      "directional_accuracy": 0.7744713278719756
+    }
+  },
+  "actual": {
+    "executions": 3843,
+    "rejected": 0,
+    "total_turnover": 344843999.6213813,
+    "total_commission": 18328.458579876413,
+    "gross_pnl": 1461.2430253863822,
+    "net_pnl": -16867.21555449003,
+    "initial_capital": 100000.0,
+    "gross_std_per_execution": 43.540716865587456,
+    "gross_return": 0.014612430253863821,
+    "cost_return": 0.18328458579876414,
+    "net_return_realized": -0.1686721555449003,
+    "gross_mean_per_execution": 0.38023497928347183,
+    "gross_t_stat": 0.541366881435695,
+    "gross_bps_per_execution": 0.04237403077886646,
+    "has_directional_edge": true
+  },
+  "frictionless": {
+    "executions": 3843,
+    "rejected": 0,
+    "total_turnover": 380852268.94347936,
+    "total_commission": 0.0,
+    "gross_pnl": 1682.901206824334,
+    "net_pnl": 1682.901206824334,
+    "initial_capital": 100000.0,
+    "gross_std_per_execution": 48.30736351383535,
+    "gross_return": 0.01682901206824334,
+    "cost_return": 0.0,
+    "net_return_realized": 0.01682901206824334,
+    "gross_mean_per_execution": 0.4379134027645938,
+    "gross_t_stat": 0.561966069090486,
+    "gross_bps_per_execution": 0.04418776896072755,
+    "has_directional_edge": true
+  }
+}

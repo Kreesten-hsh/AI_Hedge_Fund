@@ -41,8 +41,28 @@ Aucune nouvelle couche ne peut être développée avant validation complète de 
 ### 9. Discipline scientifique
 Une hypothèse suit toujours le même protocole : Hypothèse -> Implémentation -> Tests unitaires -> Validation statistique -> Validation économique -> Intégration. Si une étape échoue, on abandonne l'hypothèse.
 
+#### Gate : recherche écosystème avant construction
+Avant toute tâche qui construit un module de calcul, d'analyse, ou d'infrastructure générique (indicateur, backtester, gestion de risque, scheduler, etc.) :
+
+1. **Recherche obligatoire** : 3-5 requêtes web + vérification GitHub (dernière activité, nombre de mainteneurs, licence) AVANT d'écrire du code.
+2. **Documentation dans `docs/refont/BUILD_VS_REUSE.md`** : consigner le résultat même si la conclusion est "on code nous-mêmes" — la raison doit être écrite (performance, dépendance trop lourde, licence incompatible, fonctionnalité manquante), jamais supposée.
+3. **Signal d'alerte** : brique non maintenue depuis 12+ mois ou à mainteneur unique = surveiller, pas disqualification automatique.
+
+Rationale : pandas-ta-classic (193+ indicateurs) et alphalens-reloaded (analyse IC + détection tests multiples) existent déjà et couvrent du code qu'on vient de déboguer manuellement. Le gate force la question "existe-t-il déjà ?" avant "comment on le code ?".
+
 ### 10. Une seule définition du succès
 Le projet avance uniquement lorsqu'une hypothèse est validée ou rejetée avec des preuves reproductibles. Même un rejet est une progression.
+
+---
+
+## Constitution Technique (Engineering Rules)
+
+1. **Règle 1 - Isolement du Domaine (Clean Architecture)** : Aucun accès direct au Broker depuis la couche Domaine (`domain/`). Toutes les interactions passent par la couche Infrastructure via des Ports/Adaptateurs.
+2. **Règle 2 - Sécurisation du Chemin Critique** : Aucun LLM dans le chemin critique d'exécution des ordres temps réel. Les LLM opèrent en asynchrone hors de la boucle déterministe.
+3. **Règle 3 - Justification des Dépendances & Vendoring** : Toute nouvelle dépendance ou tout code amont vendoré doit porter une justification formelle et sa licence exacte dans `docs/refont/BUILD_VS_REUSE.md`.
+4. **Règle 4 - Validation par les Tests Effectifs** : Tout composant doit posséder une suite de tests unitaires exécutables qui valident le comportement réel (les mocks à `passed=True` ou tests non exécutés comptent comme absence de test).
+5. **Règle 5 - Documentation-Driven Development Verified** : Toute affirmation d'état dans `docs/` doit citer un `fichier:ligne` vérifiable ou porter un marqueur d'audit mesurable.
+6. **Règle 6 - Traçabilité Totale des Décisions** : Chaque cycle d'évaluation ou trade doit être traçable via un hash de commit `git_version` et un hash de données `data_hash`.
 
 ---
 

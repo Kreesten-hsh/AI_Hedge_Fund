@@ -1,16 +1,23 @@
 import pytest
-import asyncio
-from unittest.mock import MagicMock, AsyncMock
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, create_autospec
 from decimal import Decimal
 from typing import AsyncGenerator
 
 from aegis_trade.application.paper_trading.orchestrator import PaperTradingOrchestrator
 from aegis_trade.application.paper_trading.interfaces import IPaperBroker, IMarketFeed
+from aegis_trade.domain.core import AssetClass, MarketBar, Symbol, TimeFrame
 from aegis_trade.engine.global_risk import GlobalRiskManager
 from aegis_trade.engine.portfolio import PortfolioEngine
 from aegis_trade.application.council.orchestrator import MultiAgentCouncil
+from aegis_trade.application.council.feature_provider import RollingFeatureProvider
+from aegis_trade.infrastructure.features.technical_extractor import (
+    TechnicalFeatureExtractor,
+)
 from aegis_trade.domain.rl import IPolicyStore
 from aegis_trade.domain.council import CouncilVerdict
+
+AAPL = Symbol(name="AAPL", asset_class=AssetClass.EQUITIES)
 
 # Mock feed for testing
 class MockFeed(IMarketFeed):
@@ -27,21 +34,34 @@ async def test_orchestrator_council_integration():
     Verifies that _process_feed correctly builds MarketContext, calls MultiAgentCouncil,
     validates the resulting order with RiskManager, and submits it to the broker.
     """
-    # Mocks
-    broker = MagicMock(spec=IPaperBroker)
+    # Doubles à signature vérifiée : `MagicMock(spec=...)` accepte n'importe
+    # quels arguments, donc il laissait passer un appel à 3 arguments là où la
+    # production en passe 4. `create_autospec` échoue au moment de l'appel.
+    broker = create_autospec(IPaperBroker, instance=True)
     broker.submit_order = AsyncMock()
-    
-    bar_mock = MagicMock()
-    bar_mock.symbol = "AAPL"
-    bar_mock.close = 150.0
+
+    # Une vraie `MarketBar` et non un MagicMock : le flux produit des bars
+    # horodatées en UTC, et l'orchestrateur les pousse désormais dans le
+    # portefeuille (Lot 2D). Un double sans timestamp réel laisserait passer
+    # une régression que la production rejetterait.
+    bar_mock = MarketBar(
+        symbol=AAPL,
+        timeframe=TimeFrame.M1,
+        timestamp=datetime.now(timezone.utc),
+        open=Decimal("150.0"),
+        high=Decimal("150.0"),
+        low=Decimal("150.0"),
+        close=Decimal("150.0"),
+        volume=Decimal("1000"),
+    )
     feed = MockFeed([bar_mock])
-    
-    risk_manager = MagicMock(spec=GlobalRiskManager)
+
+    risk_manager = create_autospec(GlobalRiskManager, instance=True)
     risk_manager.validate_order.return_value = (True, "OK")
-    
-    portfolio_engine = MagicMock(spec=PortfolioEngine)
-    
-    council = MagicMock(spec=MultiAgentCouncil)
+
+    portfolio_engine = create_autospec(PortfolioEngine, instance=True)
+
+    council = create_autospec(MultiAgentCouncil, instance=True)
     
     # Setup council mock to return a valid BUY verdict
     mock_verdict = CouncilVerdict(
@@ -56,9 +76,8 @@ async def test_orchestrator_council_integration():
     
     # Mock create_order output
     from aegis_trade.engine.events import OrderEvent, OrderAction
-    from datetime import datetime, timezone
     order_event_mock = OrderEvent(
-        symbol="AAPL",
+        symbol=AAPL,
         action=OrderAction.BUY,
         volume=Decimal("1.2"),
         order_type="MARKET",
@@ -66,7 +85,7 @@ async def test_orchestrator_council_integration():
     )
     council.create_order.return_value = order_event_mock
     
-    policy_store = MagicMock(spec=IPolicyStore)
+    policy_store = create_autospec(IPolicyStore, instance=True)
     policy_store.load_active_policy.return_value = None # Fallback to equal weights
     
     event_publisher = AsyncMock()
@@ -79,9 +98,12 @@ async def test_orchestrator_council_integration():
         portfolio_engine=portfolio_engine,
         event_publisher=event_publisher,
         council=council,
-        policy_store=policy_store
+        policy_store=policy_store,
+        feature_provider=RollingFeatureProvider(
+            extractor=TechnicalFeatureExtractor()
+        )
     )
-    
+
     # Run _process_feed
     orchestrator.is_running = True
     await orchestrator._process_feed()
@@ -93,8 +115,13 @@ async def test_orchestrator_council_integration():
     # 2. Council evaluate should be called
     council.evaluate.assert_called_once()
     
-    # 3. Council create_order should be called with base volume 1.0
-    council.create_order.assert_called_once_with(mock_verdict, "AAPL", 1.0)
+    # 3. Council create_order should be called with base volume 1.0 and the context
+    council.create_order.assert_called_once()
+    create_args = council.create_order.call_args[0]
+    assert create_args[0] == mock_verdict
+    assert create_args[1] == AAPL
+    assert create_args[2] == 1.0
+    assert create_args[3].symbol == AAPL
     
     # 4. Risk Manager validate_order should be called (not evaluate_order)
     risk_manager.validate_order.assert_called_once()
@@ -105,7 +132,7 @@ async def test_orchestrator_council_integration():
     paper_order = broker.submit_order.call_args[0][0]
     
     from aegis_trade.domain.paper.models import ActionType, OrderType
-    assert paper_order.symbol == "AAPL"
+    assert paper_order.symbol == AAPL
     assert paper_order.action == ActionType.BUY
     assert paper_order.order_type == OrderType.MARKET
     assert paper_order.volume == Decimal("1.2")

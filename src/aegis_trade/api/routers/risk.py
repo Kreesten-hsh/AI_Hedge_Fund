@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from aegis_trade.application.dashboard.services import DashboardService
 from aegis_trade.application.monitoring.models import RiskSnapshot
 from aegis_trade.api.deps import get_dashboard_service, get_orchestrator
+from aegis_trade.api.security import require_api_token
 from aegis_trade.application.paper_trading.orchestrator import PaperTradingOrchestrator
 
 router = APIRouter()
@@ -10,7 +11,7 @@ router = APIRouter()
 def get_risk_status(service: DashboardService = Depends(get_dashboard_service)):
     return service.get_risk_status()
 
-@router.post("/kill-switch")
+@router.post("/kill-switch", dependencies=[Depends(require_api_token)])
 async def trigger_kill_switch(
     service: DashboardService = Depends(get_dashboard_service),
     orchestrator: PaperTradingOrchestrator = Depends(get_orchestrator)

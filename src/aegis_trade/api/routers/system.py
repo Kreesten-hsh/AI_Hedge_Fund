@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from aegis_trade.application.dashboard.services import DashboardService
 from aegis_trade.application.monitoring.models import SystemSnapshot
 from aegis_trade.api.deps import get_dashboard_service, get_orchestrator
+from aegis_trade.api.security import require_api_token
 from aegis_trade.application.paper_trading.orchestrator import PaperTradingOrchestrator
 
 router = APIRouter()
@@ -14,7 +15,7 @@ def get_system_info():
 def get_system_health(service: DashboardService = Depends(get_dashboard_service)):
     return service.get_system_health()
 
-@router.post("/strategy/{strategy_id}/start")
+@router.post("/strategy/{strategy_id}/start", dependencies=[Depends(require_api_token)])
 async def start_strategy(
     strategy_id: str,
     service: DashboardService = Depends(get_dashboard_service),
@@ -27,7 +28,7 @@ async def start_strategy(
         await service.monitoring._broadcast("system", service.monitoring.system)
     return {"status": "SUCCESS", "message": f"Strategy {strategy_id} started (Orchestrator task running)"}
 
-@router.post("/strategy/{strategy_id}/stop")
+@router.post("/strategy/{strategy_id}/stop", dependencies=[Depends(require_api_token)])
 async def stop_strategy(
     strategy_id: str,
     service: DashboardService = Depends(get_dashboard_service),

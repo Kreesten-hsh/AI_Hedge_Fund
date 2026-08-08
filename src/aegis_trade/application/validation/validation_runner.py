@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timezone
-from typing import Dict, Type
+from typing import Callable, Dict
 
 from aegis_trade.domain.validation import (
     ValidationContext, ValidationArtifact, ValidationReport, ValidationCampaignType
@@ -44,20 +44,37 @@ class ValidationRunner:
         self,
         strategy: IStrategy,
         data_feed: IDataFeed,
-        broker_factory: Type[IBroker],
+        broker_factory: Callable[[], IBroker],
         config: ValidationConfig
     ) -> ValidationArtifact:
         
         logger.info("Initializing Validation Framework Run...")
         
         # 1. Capture Execution Context for Reproducibility
-        # In a real environment, git_version and data_hash would be dynamically resolved.
+        git_ver = "unknown"
+        try:
+            import subprocess
+            git_ver = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL).decode().strip()
+        except Exception:
+            git_ver = "v1.0.0-git-fallback"
+
+        data_h = "hash_empty_data"
+        try:
+            import glob, hashlib
+            hasher = hashlib.sha256()
+            for p in sorted(glob.glob("data/market_data/*.parquet")):
+                with open(p, "rb") as f:
+                    hasher.update(f.read())
+            data_h = hasher.hexdigest()[:16]
+        except Exception:
+            data_h = "hash_fallback_1234"
+
         context = ValidationContext(
             seed=config.seed,
-            git_version="v1.0.0-mock",
+            git_version=git_ver,
             strategy_version=strategy.__class__.__name__,
             config_version="v1",
-            data_hash="hash_mock_1234",
+            data_hash=data_h,
             timestamp=datetime.now(timezone.utc)
         )
         

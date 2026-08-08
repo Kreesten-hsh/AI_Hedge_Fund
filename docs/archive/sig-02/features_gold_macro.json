@@ -1,0 +1,439 @@
+{
+  "surviving_pairs": [],
+  "horizons": {
+    "5": [
+      {
+        "feature": "feature_macro_dfii10_change_5d",
+        "ic_train": -0.0174,
+        "ic_test": -0.0211,
+        "t_test": -1.41,
+        "n_eff": 4499,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "feature_macro_dxy_change_1d",
+        "ic_train": -0.0017,
+        "ic_test": 0.0202,
+        "t_test": 1.36,
+        "n_eff": 4499,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "feature_macro_dxy_change_5d",
+        "ic_train": -0.0162,
+        "ic_test": -0.012,
+        "t_test": -0.81,
+        "n_eff": 4499,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "macro_dxy",
+        "ic_train": -0.0055,
+        "ic_test": -0.0089,
+        "t_test": -0.6,
+        "n_eff": 4499,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "macro_dfii10",
+        "ic_train": -0.0073,
+        "ic_test": 0.0042,
+        "t_test": 0.28,
+        "n_eff": 4499,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "feature_macro_dfii10_change_1d",
+        "ic_train": -0.0066,
+        "ic_test": 0.0012,
+        "t_test": 0.08,
+        "n_eff": 4499,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      }
+    ],
+    "10": [
+      {
+        "feature": "feature_macro_dfii10_change_5d",
+        "ic_train": -0.0282,
+        "ic_test": -0.0363,
+        "t_test": -1.72,
+        "n_eff": 2249,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "feature_macro_dxy_change_1d",
+        "ic_train": 0.0004,
+        "ic_test": 0.0278,
+        "t_test": 1.32,
+        "n_eff": 2249,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "feature_macro_dxy_change_5d",
+        "ic_train": -0.0265,
+        "ic_test": -0.0227,
+        "t_test": -1.08,
+        "n_eff": 2249,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "macro_dxy",
+        "ic_train": -0.0078,
+        "ic_test": -0.0196,
+        "t_test": -0.93,
+        "n_eff": 2249,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "macro_dfii10",
+        "ic_train": -0.0118,
+        "ic_test": 0.0034,
+        "t_test": 0.16,
+        "n_eff": 2249,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "feature_macro_dfii10_change_1d",
+        "ic_train": -0.0045,
+        "ic_test": -0.0003,
+        "t_test": -0.01,
+        "n_eff": 2249,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      }
+    ],
+    "15": [
+      {
+        "feature": "feature_macro_dfii10_change_5d",
+        "ic_train": -0.0338,
+        "ic_test": -0.0441,
+        "t_test": -1.71,
+        "n_eff": 1499,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "feature_macro_dxy_change_1d",
+        "ic_train": 0.0059,
+        "ic_test": 0.0334,
+        "t_test": 1.29,
+        "n_eff": 1499,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "feature_macro_dxy_change_5d",
+        "ic_train": -0.0315,
+        "ic_test": -0.0264,
+        "t_test": -1.02,
+        "n_eff": 1499,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "macro_dxy",
+        "ic_train": -0.0076,
+        "ic_test": -0.0226,
+        "t_test": -0.87,
+        "n_eff": 1499,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "macro_dfii10",
+        "ic_train": -0.0137,
+        "ic_test": 0.0074,
+        "t_test": 0.29,
+        "n_eff": 1499,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "feature_macro_dfii10_change_1d",
+        "ic_train": -0.0037,
+        "ic_test": -0.002,
+        "t_test": -0.08,
+        "n_eff": 1499,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      }
+    ],
+    "30": [
+      {
+        "feature": "feature_macro_dfii10_change_5d",
+        "ic_train": -0.0409,
+        "ic_test": -0.0641,
+        "t_test": -1.76,
+        "n_eff": 749,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "feature_macro_dxy_change_1d",
+        "ic_train": 0.0075,
+        "ic_test": 0.0471,
+        "t_test": 1.29,
+        "n_eff": 749,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "feature_macro_dxy_change_5d",
+        "ic_train": -0.0396,
+        "ic_test": -0.038,
+        "t_test": -1.04,
+        "n_eff": 749,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "macro_dxy",
+        "ic_train": -0.0053,
+        "ic_test": -0.0313,
+        "t_test": -0.86,
+        "n_eff": 749,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "feature_macro_dfii10_change_1d",
+        "ic_train": -0.0111,
+        "ic_test": -0.0058,
+        "t_test": -0.16,
+        "n_eff": 749,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "macro_dfii10",
+        "ic_train": -0.0171,
+        "ic_test": 0.0043,
+        "t_test": 0.12,
+        "n_eff": 749,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      }
+    ],
+    "60": [
+      {
+        "feature": "feature_macro_dfii10_change_5d",
+        "ic_train": -0.0518,
+        "ic_test": -0.086,
+        "t_test": -1.66,
+        "n_eff": 374,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "feature_macro_dxy_change_1d",
+        "ic_train": 0.0054,
+        "ic_test": 0.0677,
+        "t_test": 1.31,
+        "n_eff": 374,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "feature_macro_dxy_change_5d",
+        "ic_train": -0.0456,
+        "ic_test": -0.0567,
+        "t_test": -1.1,
+        "n_eff": 374,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "macro_dxy",
+        "ic_train": -0.0043,
+        "ic_test": -0.0443,
+        "t_test": -0.86,
+        "n_eff": 374,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "macro_dfii10",
+        "ic_train": -0.0243,
+        "ic_test": 0.0161,
+        "t_test": 0.31,
+        "n_eff": 374,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "feature_macro_dfii10_change_1d",
+        "ic_train": -0.0192,
+        "ic_test": 0.0055,
+        "t_test": 0.11,
+        "n_eff": 374,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      }
+    ],
+    "120": [
+      {
+        "feature": "feature_macro_dfii10_change_5d",
+        "ic_train": -0.0811,
+        "ic_test": -0.1409,
+        "t_test": -1.93,
+        "n_eff": 186,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "feature_macro_dxy_change_5d",
+        "ic_train": -0.0643,
+        "ic_test": -0.0996,
+        "t_test": -1.36,
+        "n_eff": 186,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "macro_dxy",
+        "ic_train": -0.0069,
+        "ic_test": -0.0853,
+        "t_test": -1.16,
+        "n_eff": 186,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "feature_macro_dxy_change_1d",
+        "ic_train": 0.0044,
+        "ic_test": 0.0847,
+        "t_test": 1.15,
+        "n_eff": 186,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "macro_dfii10",
+        "ic_train": -0.0428,
+        "ic_test": 0.0179,
+        "t_test": 0.24,
+        "n_eff": 186,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "feature_macro_dfii10_change_1d",
+        "ic_train": -0.0344,
+        "ic_test": 0.0053,
+        "t_test": 0.07,
+        "n_eff": 186,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      }
+    ],
+    "240": [
+      {
+        "feature": "feature_macro_dfii10_change_5d",
+        "ic_train": -0.092,
+        "ic_test": -0.1816,
+        "t_test": -1.75,
+        "n_eff": 92,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "feature_macro_dxy_change_1d",
+        "ic_train": 0.0015,
+        "ic_test": 0.1325,
+        "t_test": 1.27,
+        "n_eff": 92,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "feature_macro_dxy_change_5d",
+        "ic_train": -0.0734,
+        "ic_test": -0.1317,
+        "t_test": -1.26,
+        "n_eff": 92,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "macro_dxy",
+        "ic_train": -0.0072,
+        "ic_test": -0.106,
+        "t_test": -1.01,
+        "n_eff": 92,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "macro_dfii10",
+        "ic_train": -0.054,
+        "ic_test": 0.0307,
+        "t_test": 0.29,
+        "n_eff": 92,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      },
+      {
+        "feature": "feature_macro_dfii10_change_1d",
+        "ic_train": -0.0492,
+        "ic_test": 0.0112,
+        "t_test": 0.11,
+        "n_eff": 92,
+        "ir_test": 0.0,
+        "stability": 0.0,
+        "verdict": ""
+      }
+    ]
+  }
+}

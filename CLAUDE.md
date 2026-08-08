@@ -38,6 +38,16 @@ Interdiction de sauter une étape. Si on te demande de brancher un modèle ML su
 
 Toute nouvelle idée de stratégie ou de feature suit : Hypothèse → Implémentation → Tests unitaires → Validation statistique → Validation économique → Intégration. Un échec à une étape = hypothèse abandonnée et documentée, jamais forcée à l'étape suivante. Un rejet propre avec preuves reproductibles est un progrès, pas un échec de la session.
 
+## GATE : RECHERCHE ÉCOSYSTÈME AVANT CONSTRUCTION
+
+Avant toute tâche qui construit un module de calcul, d'analyse, ou d'infrastructure générique (indicateur, backtester, gestion de risque, scheduler, etc.) :
+
+1. **Recherche obligatoire** : 3–5 requêtes web + vérification GitHub (dernière activité, nombre de mainteneurs, licence) AVANT d'écrire du code.
+2. **Documentation dans `docs/refont/BUILD_VS_REUSE.md`** : consigner le résultat même si la conclusion est "on code nous-mêmes" — la raison doit être écrite (performance, dépendance trop lourde, licence incompatible, fonctionnalité manquante), jamais supposée.
+3. **Signal d'alerte** : brique non maintenue depuis 12+ mois ou à mainteneur unique = surveiller, pas disqualification automatique.
+
+Rationale : pandas-ta-classic (193 indicateurs + accélération numba) et alphalens-reloaded (analyse IC + détection sur-ajustement) existent déjà et couvrent du code qu'on vient de déboguer manuellement. Le gate force la question "existe-t-il déjà ?" avant "comment on le code ?".
+
 # GARDE-FOUS OPÉRATIONNELS (ce que ce projet n'a pas encore et qui a déjà causé un incident)
 
 - **Aucun commit ne part sans message généré à partir du diff réel.** Si tu ne peux pas produire un message de commit descriptif parce que le contexte est insuffisant, tu STOPPES et tu demandes le diff — tu ne commits jamais un message d'excuse ou de clarification.

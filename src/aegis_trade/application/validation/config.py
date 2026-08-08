@@ -7,6 +7,8 @@ from aegis_trade.domain.validation import ValidationCampaignType
 class ValidationConfig:
     """
     Objet de configuration centralisant le paramétrage des campagnes de validation.
+    Note (Directive CTO): Les seuils par défaut (Sharpe > 0.5, P(ruine) < 5%) sont des seuils
+    provisoires de démarrage, destinés à être resserrés après accumulation de données réelles en démo.
     """
     # Active campaigns
     active_campaigns: List[ValidationCampaignType] = field(default_factory=lambda: [

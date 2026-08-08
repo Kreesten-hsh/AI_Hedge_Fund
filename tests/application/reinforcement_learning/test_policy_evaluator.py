@@ -3,8 +3,8 @@ Tests for Policy Evaluator.
 """
 
 from unittest.mock import MagicMock
-from src.aegis_trade.application.reinforcement_learning.policy_evaluator import PolicyEvaluator
-from src.aegis_trade.domain.rl import IPolicyStore
+from aegis_trade.application.reinforcement_learning.policy_evaluator import PolicyEvaluator
+from aegis_trade.domain.rl import IPolicyStore
 
 
 def test_policy_evaluator_promotes():

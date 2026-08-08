@@ -1,35 +1,29 @@
-# Statut d'Intégration de Kronos — Évaluation & Conditions de Réactivation
+# Kronos — Statut d'intégration réel et condition d'activation (v2.0)
 
-- **Statut** : SUSPENDU / INACTIF (Conditionnel v2.0)
-- **Date** : 2026-08-08
-- **Composants concernés** : `src/aegis_trade/providers/kronos/`, `src/aegis_trade/providers/kronos_adapter.py:1-75`, `docs/phase2/KRONOS_MINI_INTEGRATION_SPEC.md`
-- **Dépend de** : ADR 0019 (Réfutation Horizon 1-bar), ADR 0031 (Réfutation Crypto & ML Ranking), ADR 0032 (Pivot Pipeline Cognitif v2.0)
+> Ce document ré-audite `providers/kronos_adapter.py` au 2026-08-08, en complément de `docs/archive/KRONOS_EVALUATION_REPORT.md` (2026-07-31), déjà présent dans le dépôt. Les deux audits convergent : rien n'a changé sur ce module depuis le 31 juillet.
 
----
+## 1. État vérifié au grep
 
-## 1. Contexte & Historique
+| Élément | Statut | Preuve |
+|---|---|---|
+| Identité du modèle | Corrigée | Modèle réellement vendoré : `NeoQuasar/Kronos-mini` (`providers/kronos/model_factory.py:15`). **Pas** `shiyu-coder/Kronos` — dépôt distinct, confusion fréquente car le dossier local s'appelle `shiyu_model/` |
+| Chargement du predictor | `[VALIDÉ]` | `KronosModelFactory.get_predictor()` charge un `KronosPredictor` réel |
+| Données d'entrée du predictor | `[FAÇADE]` | `kronos_adapter.py:59-66` : `dummy_df = pd.DataFrame(np.random.randn(512, 6) + 100, ...)`. Le paramètre `data_provider` reçu par `start_background_refresh` n'est jamais lu pour construire ce dataframe |
+| Isolation asynchrone du tick loop | `[VALIDÉ]` | `asyncio.to_thread(run_prediction)` (`:85`), lecture cache O(1) (`:111`), couvert par `tests/providers/test_kronos_cache_never_blocks_tick_loop.py` |
+| Instanciation en production | `[ ]` | `KronosAdapter` n'apparaît nulle part hors de son propre fichier dans `src/` |
+| Injection dans les agents Council | `[ÉCRIT-NON-CÂBLÉ]` | `PatternAgent.__init__` et `TrendAgent.__init__` acceptent un `forecaster: Optional[IForecaster]` — rien ne l'instancie ni ne l'injecte |
+| Qualité prédictive | `[ ]` | Zéro MAPE, zéro RMSE, zéro baseline naïve nulle part dans `src/`, `scripts/`, `tests/` |
 
-Le composant **Kronos** (`src/aegis_trade/providers/kronos/`) est un modèle de fondation de séries temporelles basé sur des architectures deep learning/sequence-to-sequence. Il visait initialement à fournir des prédictions de prix et de trajectoire de court terme.
+## 2. Conséquence pour le pivot v2.0
 
----
+Kronos reste un objectif technique légitime du projet, mais **son état actuel ne doit influencer aucune décision de trading**, même en démo — un forecast produit à partir de bruit aléatoire n'est pas un signal dégradé, c'est un signal inexistant qui aurait l'apparence d'un signal. L'injecter tel quel dans le Module 2 romprait la traçabilité (résumé v4 §3 : le motif documenté toute la semaine était précisément des composants qui *semblent* fonctionner sans l'être).
 
-## 2. Décision de Suspension (ADR 0019, 0031, 0032)
+## 3. Conditions d'activation (les trois doivent être remplies, pas une sélection)
 
-À l'issue des campagnes de validation statistique empirique :
-1. **Absence d'Alpha Univarié** : À l'instar des modèles GBDT (LightGBM) et des indicateurs techniques classiques, la prédiction numérique brute de trajectoire temporelle sur séries univariées ne franchit pas la barre du péage d'exécution ($1.859\text{ bps}$ sur Gold, $10\text{ bps}$ sur Crypto).
-2. **Rejet de l'Horizon Court** (ADR 0019) : L'horizon 1-bar est mathématiquement dominé par le bruit micro-structurel et les coûts de transaction broker.
-3. **Alignement avec la Directive AGENTS.md §2 et §6** : Interdiction de développer ou maintenir en statut actif des composants spéculatifs n'apportant pas de valeur mesurable immédiate.
+1. **Données réelles** : `data_provider` effectivement lu dans `_refresh_loop`, alimentant `dummy_df` avec de vraies bougies OHLCV H4/D1 du symbole concerné — plus de `np.random`.
+2. **Qualité mesurée** : MAPE et/ou RMSE calculés sur un jeu de validation réel, comparés à une baseline naïve (ex : dernière valeur connue). Sans ce chiffre, aucune décision ne peut s'appuyer sur Kronos, même en signal secondaire.
+3. **Câblage réel** : `KronosAdapter` instancié et injecté dans le composant d'analyse structurelle du Module 2 (successeur de `PatternAgent`), avec un test qui prouve que le forecast est effectivement lu et utilisé dans la décision finale — pas seulement câblable en théorie.
 
-En conséquence, l'intégration de Kronos est **SUSPENDUE** et le module `kronos_adapter.py` demeure désactivé du chemin d'exécution principal.
+## 4. Portée dans ce sprint
 
----
-
-## 3. Conditions Formelles de Réactivation Futurs (Roadmap Post-Demo)
-
-Le composant Kronos ne pourra être réactivé dans l'architecture Aegis Quant OS qu'aux conditions strictes et cumulatives suivantes :
-
-1. **Publication d'un ADR Dédié** : Rédaction d'un nouvel ADR réorientant l'utilisation de Kronos non pas vers la prédiction univariée de prix, mais vers l'extraction de représentations d'état (embeddings temporels sémantiques).
-2. **Validation d'un Spearman Rank IC Out-Of-Sample** $\ge 0.05$ ($|t| > 2.0$) mesuré avec déduction préalable des péages d'exécution broker.
-3. **Approbation de l'Agent Cognitif Sémantique** : Intégration de l'output de Kronos en tant que signal contextuel secondaire consommé par le Module 2 (Agent Cognitif), sans droit de soumission directe d'ordre au broker.
-
-En l'absence de ces conditions, le code dans `src/aegis_trade/providers/kronos/` reste conservé à titre de référence et d'archive de recherche, conformément à l'ADR 0032.
+Kronos est **hors chemin critique** du Module 2 pour la première itération. Le Module 2 doit être fonctionnel et testé sans dépendre de Kronos. L'activation de Kronos est un sprint séparé, déclenché uniquement une fois les trois conditions ci-dessus remplies et documentées dans un ADR dédié.

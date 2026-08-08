@@ -2,7 +2,7 @@
 
 - **Statut** : ACCEPTÉ / SCELLÉ (Pivot Stratégique v2.0)
 - **Date** : 2026-08-08
-- **Contexte technique** : `src/aegis_trade/engine/orchestrator.py`, `src/aegis_trade/domain/council.py`, `src/aegis_trade/infrastructure/llm/adapters/ollama_adapter.py`, `src/aegis_trade/infrastructure/memory/faiss_store.py`
+- **Contexte technique** : `src/aegis_trade/application/paper_trading/orchestrator.py`, `src/aegis_trade/domain/council.py`, `src/aegis_trade/infrastructure/llm/adapters/ollama_adapter.py`, `src/aegis_trade/infrastructure/memory/faiss_store.py`
 - **Dépend de** : ADR 0017 (Score Monotone), ADR 0018 (Seuils Dérivés du Coût), ADR 0021 (Péage d'Exécution), ADR 0024 (Rejet SIG-02), ADR 0028 (Council Audit), ADR 0030 (Réfutation H4/D1 Macro), ADR 0031 (Réfutation Crypto Trend & ML Ranking)
 - **Résout** : Échec structurel des approches par force brute statistique et redirection intégrale des ressources vers l'autonomie cognitivo-sémantique via LLM local.
 
@@ -41,7 +41,7 @@ Pour éviter toute réécriture superflue (Conformité Directive AGENTS.md §2 e
 
 | Module V2.0 | Composant Existant | Emplacement Fichier:Ligne | Statut de Réutilisation | Rôle dans l'Architecture V2.0 |
 | :--- | :--- | :--- | :--- | :--- |
-| **Module 1 : Orchestrateur Déterministe** | `Orchestrator` | `src/aegis_trade/engine/orchestrator.py:1-120` | **Réutilisé à 100%** | Boucle d'événement, séquencement et dispatch des ordres |
+| **Module 1 : Orchestrateur Déterministe** | `Orchestrator` | `src/aegis_trade/application/paper_trading/orchestrator.py` | **Réutilisé à 100%** | Boucle d'événement, séquencement et dispatch des ordres |
 | | `MultiAgentCouncil` & `AgentVote` | `src/aegis_trade/domain/council.py:1-85` | **Réutilisé à 100%** | Veto déterministe impératif (Liquidity/Execution $\ge 0.8$) après prompt LLM |
 | | `RiskGate` | `src/aegis_trade/engine/risk_gate.py:1-95` | **Réutilisé à 100%** | Contrôle des limites de capital et drawdown maximum |
 | | `SimulatedBroker` / `DerivGateway` | `src/aegis_trade/infrastructure/brokers/simulated_broker.py:1-90` | **Réutilisé à 100%** | Adaptateur d'exécution broker et simulation de slippage |

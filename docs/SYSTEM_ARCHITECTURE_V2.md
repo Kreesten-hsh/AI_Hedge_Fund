@@ -68,7 +68,7 @@ S'appuyant sur la carte de réutilisation scellée dans l'[ADR 0032 §3](file://
 Ce module détient l'autorité ultime d'exécution. Il héberge les garde-fous déterministes et la gestion du risque.
 
 - **Composants Réutilisés** :
-  - `Orchestrator` : `src/aegis_trade/engine/orchestrator.py:1-120` (Boucle d'événements et dispatch).
+  - `Orchestrator` : `src/aegis_trade/application/paper_trading/orchestrator.py` (Boucle d'événements et dispatch).
   - `MultiAgentCouncil` & `AgentVote` : `src/aegis_trade/domain/council.py:1-85` (Agrégation déterministe et gestion des votes).
   - `RiskGate` : `src/aegis_trade/engine/risk_gate.py:1-95` (Limites de drawdown et d'exposition capital).
   - `SimulatedBroker` / `DerivGateway` : `src/aegis_trade/infrastructure/brokers/simulated_broker.py:1-90` (Passerelle broker).
